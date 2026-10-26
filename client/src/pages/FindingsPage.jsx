@@ -116,46 +116,44 @@ export function FindingsPage({ onNavigate, user }) {
           gap: '12px',
           alignItems: 'center',
           flexWrap: 'wrap',
-          background: 'var(--bg-app)',
-          padding: '12px 16px',
-          borderRadius: 'var(--radius-md)',
+          background: 'rgba(255, 255, 255, 0.65)',
+          backdropFilter: 'var(--glass-blur-light)',
+          padding: '12px 18px',
+          borderRadius: 'var(--radius-lg)',
           marginBottom: '20px',
-          border: '1px solid var(--border-subtle)'
+          border: '1px solid rgba(255, 255, 255, 0.85)',
+          boxShadow: 'var(--shadow-glass-sm)'
         }}>
           {/* Text Search Input */}
           <div style={{ flex: 1, minWidth: '220px' }}>
             <input
               id="input-findings-search"
               type="text"
+              className="input"
               placeholder="Search by rule, file, excerpt, location..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
                 width: '100%',
-                padding: '6px 10px',
-                backgroundColor: 'var(--bg-surface)',
-                border: '1px solid var(--border-medium)',
-                borderRadius: 'var(--radius-sm)',
-                color: 'var(--text-primary)',
-                fontSize: '13px',
-                outline: 'none'
+                padding: '8px 14px',
+                borderRadius: 'var(--radius-pill)',
+                fontSize: '13px'
               }}
             />
           </div>
 
           {/* Severity Filter */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
-            <span style={{ color: 'var(--text-muted)' }}>Severity:</span>
+            <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Severity:</span>
             <select
               id="select-finding-severity"
+              className="input"
               value={severityFilter}
               onChange={(e) => setSeverityFilter(e.target.value)}
               style={{
-                backgroundColor: 'var(--bg-surface)',
-                border: '1px solid var(--border-medium)',
-                color: 'var(--text-primary)',
-                padding: '6px 10px',
-                borderRadius: 'var(--radius-sm)',
+                width: 'auto',
+                padding: '8px 14px',
+                borderRadius: 'var(--radius-pill)',
                 fontSize: '13px'
               }}
             >
@@ -169,17 +167,16 @@ export function FindingsPage({ onNavigate, user }) {
 
           {/* Category Filter */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
-            <span style={{ color: 'var(--text-muted)' }}>Category:</span>
+            <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Category:</span>
             <select
               id="select-finding-category"
+              className="input"
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
               style={{
-                backgroundColor: 'var(--bg-surface)',
-                border: '1px solid var(--border-medium)',
-                color: 'var(--text-primary)',
-                padding: '6px 10px',
-                borderRadius: 'var(--radius-sm)',
+                width: 'auto',
+                padding: '8px 14px',
+                borderRadius: 'var(--radius-pill)',
                 fontSize: '13px'
               }}
             >
@@ -193,17 +190,16 @@ export function FindingsPage({ onNavigate, user }) {
 
           {/* Status Filter */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
-            <span style={{ color: 'var(--text-muted)' }}>Status:</span>
+            <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Status:</span>
             <select
               id="select-finding-status"
+              className="input"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               style={{
-                backgroundColor: 'var(--bg-surface)',
-                border: '1px solid var(--border-medium)',
-                color: 'var(--text-primary)',
-                padding: '6px 10px',
-                borderRadius: 'var(--radius-sm)',
+                width: 'auto',
+                padding: '8px 14px',
+                borderRadius: 'var(--radius-pill)',
                 fontSize: '13px'
               }}
             >
@@ -218,14 +214,14 @@ export function FindingsPage({ onNavigate, user }) {
             <button
               id="btn-findings-clear-filters"
               className="btn btn-secondary"
-              style={{ fontSize: '12px', padding: '4px 10px' }}
+              style={{ fontSize: '12px', padding: '6px 14px' }}
               onClick={handleClearFilters}
             >
               Clear Filters
             </button>
           )}
 
-          <div style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--text-muted)' }}>
+          <div style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>
             Showing {filteredFindings.length} of {findings.length} findings
           </div>
         </div>
@@ -247,8 +243,8 @@ export function FindingsPage({ onNavigate, user }) {
             onAction={hasActiveFilters ? handleClearFilters : () => onNavigate('scans-new')}
           />
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+          <div className="data-table-container">
+            <table className="data-table">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-medium)', color: 'var(--text-muted)' }}>
                   <th style={{ padding: '12px 14px' }}>Category</th>

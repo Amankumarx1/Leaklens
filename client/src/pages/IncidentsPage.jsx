@@ -156,23 +156,35 @@ export function IncidentsPage({ user, onNavigate }) {
       )}
 
       {/* Filters Bar */}
-      <div className="filter-bar" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '16px', alignItems: 'center' }}>
+      <div className="filter-bar" style={{
+        display: 'flex',
+        gap: '12px',
+        flexWrap: 'wrap',
+        marginBottom: '20px',
+        alignItems: 'center',
+        background: 'rgba(255, 255, 255, 0.65)',
+        backdropFilter: 'var(--glass-blur-light)',
+        padding: '12px 18px',
+        borderRadius: 'var(--radius-lg)',
+        border: '1px solid rgba(255, 255, 255, 0.85)',
+        boxShadow: 'var(--shadow-glass-sm)'
+      }}>
         <input
           id="input-incidents-search"
           type="text"
-          className="form-input"
+          className="input"
           placeholder="Search by title, ID, or assignee..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          style={{ maxWidth: '300px' }}
+          style={{ maxWidth: '300px', borderRadius: 'var(--radius-pill)', padding: '8px 14px' }}
         />
 
         <select
           id="incident-filter-status"
-          className="form-input"
+          className="input"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          style={{ maxWidth: '200px' }}
+          style={{ maxWidth: '180px', borderRadius: 'var(--radius-pill)', padding: '8px 14px' }}
         >
           <option value="">All Statuses</option>
           <option value="OPEN">OPEN</option>
@@ -184,10 +196,10 @@ export function IncidentsPage({ user, onNavigate }) {
 
         <select
           id="incident-filter-priority"
-          className="form-input"
+          className="input"
           value={priorityFilter}
           onChange={(e) => setPriorityFilter(e.target.value)}
-          style={{ maxWidth: '200px' }}
+          style={{ maxWidth: '180px', borderRadius: 'var(--radius-pill)', padding: '8px 14px' }}
         >
           <option value="">All Priorities</option>
           <option value="CRITICAL">CRITICAL</option>
@@ -201,7 +213,7 @@ export function IncidentsPage({ user, onNavigate }) {
             id="btn-incidents-clear-filters"
             className="btn btn-secondary" 
             onClick={handleClearFilters}
-            style={{ fontSize: '12px' }}
+            style={{ fontSize: '12px', padding: '6px 14px' }}
           >
             Clear Filters
           </button>

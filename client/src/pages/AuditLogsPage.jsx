@@ -157,7 +157,18 @@ export function AuditLogsPage() {
       </div>
 
       {/* Filter Bar */}
-      <div className="panel" style={{ padding: '16px', display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+      <div className="panel" style={{
+        padding: '12px 18px',
+        display: 'flex',
+        gap: '12px',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        background: 'rgba(255, 255, 255, 0.65)',
+        backdropFilter: 'var(--glass-blur-light)',
+        border: '1px solid rgba(255, 255, 255, 0.85)',
+        borderRadius: 'var(--radius-lg)',
+        boxShadow: 'var(--shadow-glass-sm)'
+      }}>
         <div style={{ flex: 1, minWidth: '220px' }}>
           <input
             id="input-audit-search"
@@ -166,16 +177,16 @@ export function AuditLogsPage() {
             placeholder="Search by Entity ID, user, or event..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            style={{ width: '100%', padding: '6px 10px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-medium)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '13px' }}
+            style={{ width: '100%', padding: '8px 14px', borderRadius: 'var(--radius-pill)', fontSize: '13px' }}
           />
         </div>
 
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Event Filter:</span>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>Event Filter:</span>
           <select
             id="select-audit-event"
             className="input"
-            style={{ width: 'auto', padding: '6px 10px', backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-medium)', color: 'var(--text-primary)', borderRadius: 'var(--radius-sm)', fontSize: '13px' }}
+            style={{ width: 'auto', padding: '8px 14px', borderRadius: 'var(--radius-pill)', fontSize: '13px' }}
             value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
           >
@@ -192,11 +203,11 @@ export function AuditLogsPage() {
         </div>
 
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Time Range:</span>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>Time Range:</span>
           <select
             id="select-audit-timerange"
             className="input"
-            style={{ width: 'auto', padding: '6px 10px', backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-medium)', color: 'var(--text-primary)', borderRadius: 'var(--radius-sm)', fontSize: '13px' }}
+            style={{ width: 'auto', padding: '8px 14px', borderRadius: 'var(--radius-pill)', fontSize: '13px' }}
             value={dateFilter}
             onChange={(e) => setDateFilter(e.target.value)}
           >
@@ -210,14 +221,14 @@ export function AuditLogsPage() {
           <button
             id="btn-audit-clear-filters"
             className="btn btn-secondary"
-            style={{ fontSize: '12px', padding: '4px 10px' }}
+            style={{ fontSize: '12px', padding: '6px 14px' }}
             onClick={handleClearFilters}
           >
             Clear Filters
           </button>
         )}
 
-        <div style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--text-muted)' }}>
+        <div style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>
           Showing {filteredLogs.length} of {logs.length} entries
         </div>
       </div>

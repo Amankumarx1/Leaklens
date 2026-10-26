@@ -97,11 +97,13 @@ export function ScansPage({ user, onNavigate }) {
           gap: '12px',
           alignItems: 'center',
           flexWrap: 'wrap',
-          background: 'var(--bg-app)',
-          padding: '12px 16px',
-          borderRadius: 'var(--radius-md)',
+          background: 'rgba(255, 255, 255, 0.65)',
+          backdropFilter: 'var(--glass-blur-light)',
+          padding: '12px 18px',
+          borderRadius: 'var(--radius-lg)',
           marginBottom: '20px',
-          border: '1px solid var(--border-subtle)'
+          border: '1px solid rgba(255, 255, 255, 0.85)',
+          boxShadow: 'var(--shadow-glass-sm)'
         }}>
           <div style={{ flex: 1, minWidth: '220px' }}>
             <input
@@ -109,30 +111,26 @@ export function ScansPage({ user, onNavigate }) {
               placeholder="Search by filename or Scan ID..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              className="input"
               style={{
                 width: '100%',
-                padding: '6px 10px',
-                backgroundColor: 'var(--bg-surface)',
-                border: '1px solid var(--border-medium)',
-                borderRadius: 'var(--radius-sm)',
-                color: 'var(--text-primary)',
-                fontSize: '13px',
-                outline: 'none'
+                padding: '8px 14px',
+                borderRadius: 'var(--radius-pill)',
+                fontSize: '13px'
               }}
             />
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
-            <span style={{ color: 'var(--text-muted)' }}>Status:</span>
+            <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Status:</span>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
+              className="input"
               style={{
-                backgroundColor: 'var(--bg-surface)',
-                border: '1px solid var(--border-medium)',
-                color: 'var(--text-primary)',
-                padding: '6px 10px',
-                borderRadius: 'var(--radius-sm)',
+                width: 'auto',
+                padding: '8px 14px',
+                borderRadius: 'var(--radius-pill)',
                 fontSize: '13px'
               }}
             >
@@ -146,7 +144,7 @@ export function ScansPage({ user, onNavigate }) {
           {(statusFilter || searchQuery) && (
             <button
               className="btn btn-secondary"
-              style={{ fontSize: '12px', padding: '4px 10px' }}
+              style={{ fontSize: '12px', padding: '6px 14px' }}
               onClick={() => {
                 setStatusFilter('');
                 setSearchQuery('');
@@ -156,7 +154,7 @@ export function ScansPage({ user, onNavigate }) {
             </button>
           )}
 
-          <div style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--text-muted)' }}>
+          <div style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>
             Showing {filteredScans.length} of {scans.length} scans
           </div>
         </div>
@@ -177,8 +175,8 @@ export function ScansPage({ user, onNavigate }) {
             onAction={canScan && scans.length === 0 ? () => onNavigate('scans-new') : null}
           />
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+          <div className="data-table-container">
+            <table className="data-table">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-medium)', color: 'var(--text-muted)' }}>
                   <th style={{ padding: '12px 14px' }}>Scan ID</th>

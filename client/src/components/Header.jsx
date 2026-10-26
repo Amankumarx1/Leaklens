@@ -34,7 +34,6 @@ export function Header({ activeRouteTitle, health, loading, error, onRefresh, us
     statusText = 'Verifying Services...';
   } else if (error) {
     statusText = 'Backend Offline';
-    dotClass = 'error';
   } else if (health) {
     const isDbConnected = health.components?.database?.status === 'connected';
     if (health.status === 'healthy' && isDbConnected) {
@@ -58,52 +57,26 @@ export function Header({ activeRouteTitle, health, loading, error, onRefresh, us
     <header className="app-header">
       <div className="header-title-zone" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
         <h2>{activeRouteTitle}</h2>
+      </div>
 
+      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
         {/* Global Quick Search Bar */}
         <form onSubmit={handleGlobalSearch} style={{ display: 'flex', alignItems: 'center', margin: 0 }}>
           <div style={{ position: 'relative' }}>
+            <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-light)', fontSize: '13px', pointerEvents: 'none' }}>
+              🔍
+            </span>
             <input
               id="input-global-search"
               type="text"
+              className="glass-search-input"
               placeholder="Jump to findings / rules..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                backgroundColor: 'var(--bg-app)',
-                border: '1px solid var(--border-medium)',
-                borderRadius: 'var(--radius-sm)',
-                color: 'var(--text-primary)',
-                fontSize: '12px',
-                padding: '5px 28px 5px 10px',
-                width: '180px',
-                outline: 'none',
-                transition: 'width 0.2s, border-color 0.2s'
-              }}
-              onFocus={(e) => { e.target.style.width = '240px'; e.target.style.borderColor = 'var(--accent-cyan)'; }}
-              onBlur={(e) => { if (!searchQuery) e.target.style.width = '180px'; e.target.style.borderColor = 'var(--border-medium)'; }}
             />
-            <button
-              type="submit"
-              title="Search"
-              style={{
-                position: 'absolute',
-                right: '4px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                background: 'none',
-                border: 'none',
-                color: 'var(--text-muted)',
-                cursor: 'pointer',
-                padding: '2px 4px'
-              }}
-            >
-              🔍
-            </button>
           </div>
         </form>
-      </div>
 
-      <div className="header-actions">
         {/* Health status pill */}
         <div className="health-pill" title={error || (health ? JSON.stringify(health.components) : '')}>
           <span className={`health-dot ${dotClass}`} />
@@ -115,40 +88,78 @@ export function Header({ activeRouteTitle, health, loading, error, onRefresh, us
           className="btn btn-secondary" 
           onClick={onRefresh}
           title="Refresh connection status"
-          style={{ padding: '6px 12px', fontSize: '12px' }}
+          style={{ padding: '8px 14px', fontSize: '12px', borderRadius: 'var(--radius-pill)' }}
         >
           Ping
         </button>
 
+        {/* Quick notification circular icon */}
+        <div
+          style={{
+            width: '38px',
+            height: '38px',
+            borderRadius: '50%',
+            background: 'rgba(255, 255, 255, 0.7)',
+            border: '1px solid rgba(255, 255, 255, 0.85)',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--text-secondary)',
+            fontSize: '14px',
+            cursor: 'pointer'
+          }}
+          title="Active Telemetry Notifications"
+        >
+          🔔
+        </div>
+
         {/* User profile with interactive dropdown menu */}
         {user && (
-          <div ref={menuRef} style={{ position: 'relative', marginLeft: '12px', paddingLeft: '12px', borderLeft: '1px solid var(--border-medium)' }}>
+          <div ref={menuRef} style={{ position: 'relative' }}>
             <button
               id="btn-user-menu-trigger"
               onClick={() => setMenuOpen(!menuOpen)}
               style={{
-                background: 'transparent',
-                border: 'none',
+                background: 'rgba(255, 255, 255, 0.8)',
+                border: '1px solid rgba(255, 255, 255, 0.9)',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
-                padding: '4px 8px',
-                borderRadius: 'var(--radius-sm)',
-                textAlign: 'right'
+                gap: '10px',
+                padding: '5px 12px 5px 6px',
+                borderRadius: 'var(--radius-pill)',
+                boxShadow: '0 2px 10px rgba(0, 0, 0, 0.04)'
               }}
               aria-expanded={menuOpen}
               aria-label="User profile and settings menu"
             >
-              <div>
-                <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-primary)' }}>
+              <div
+                style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #fbcfe8, #a7f3d0)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  color: '#1e293b'
+                }}
+              >
+                {(user.display_name || user.email || 'U').charAt(0).toUpperCase()}
+              </div>
+
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-primary)', lineHeight: 1.1 }}>
                   {user.display_name || user.email}
                 </div>
-                <StatusBadge type={user.role === 'ADMIN' ? 'danger' : user.role === 'ANALYST' ? 'info' : 'warning'}>
+                <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
                   {user.role}
-                </StatusBadge>
+                </div>
               </div>
-              <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: '2px' }}>▼</span>
+              <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>▼</span>
             </button>
 
             {menuOpen && (
@@ -158,24 +169,25 @@ export function Header({ activeRouteTitle, health, loading, error, onRefresh, us
                   position: 'absolute',
                   right: 0,
                   top: '100%',
-                  marginTop: '8px',
-                  backgroundColor: 'var(--bg-surface)',
-                  border: '1px solid var(--border-medium)',
-                  borderRadius: 'var(--radius-md)',
-                  boxShadow: 'var(--shadow-card)',
-                  minWidth: '220px',
+                  marginTop: '10px',
+                  backgroundColor: 'var(--glass-surface-ultra)',
+                  backdropFilter: 'var(--glass-blur-heavy)',
+                  border: '1px solid var(--border-glass-strong)',
+                  borderRadius: 'var(--radius-lg)',
+                  boxShadow: 'var(--shadow-glass-lg)',
+                  minWidth: '240px',
                   zIndex: 1000,
-                  padding: '8px 0',
+                  padding: '10px 0',
                   fontSize: '13px'
                 }}
               >
-                <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
-                  <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{user.display_name || 'Security Operator'}</div>
+                <div style={{ padding: '10px 18px', borderBottom: '1px solid rgba(226, 232, 240, 0.7)' }}>
+                  <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{user.display_name || 'Security Operator'}</div>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{user.email}</div>
-                  <div style={{ marginTop: '4px' }}>
-                    <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--accent-cyan)' }}>
-                      Role: {user.role}
-                    </span>
+                  <div style={{ marginTop: '6px' }}>
+                    <StatusBadge type={user.role === 'ADMIN' ? 'danger' : user.role === 'ANALYST' ? 'info' : 'warning'}>
+                      {user.role}
+                    </StatusBadge>
                   </div>
                 </div>
 
@@ -191,7 +203,7 @@ export function Header({ activeRouteTitle, health, loading, error, onRefresh, us
                       style={{
                         width: '100%',
                         textAlign: 'left',
-                        padding: '8px 16px',
+                        padding: '10px 18px',
                         background: 'none',
                         border: 'none',
                         color: 'var(--text-primary)',
@@ -199,7 +211,8 @@ export function Header({ activeRouteTitle, health, loading, error, onRefresh, us
                         fontSize: '13px',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '8px'
+                        gap: '10px',
+                        borderRadius: 0
                       }}
                     >
                       ⚙️ System Settings & Posture
@@ -215,7 +228,7 @@ export function Header({ activeRouteTitle, health, loading, error, onRefresh, us
                       style={{
                         width: '100%',
                         textAlign: 'left',
-                        padding: '8px 16px',
+                        padding: '10px 18px',
                         background: 'none',
                         border: 'none',
                         color: 'var(--text-primary)',
@@ -223,7 +236,8 @@ export function Header({ activeRouteTitle, health, loading, error, onRefresh, us
                         fontSize: '13px',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '8px'
+                        gap: '10px',
+                        borderRadius: 0
                       }}
                     >
                       📊 Analytics & Power BI
@@ -231,7 +245,7 @@ export function Header({ activeRouteTitle, health, loading, error, onRefresh, us
                   </>
                 )}
 
-                <div style={{ borderTop: '1px solid var(--border-subtle)', margin: '4px 0' }} />
+                <div style={{ borderTop: '1px solid rgba(226, 232, 240, 0.7)', margin: '6px 0' }} />
 
                 <button
                   id="btn-logout"
@@ -242,15 +256,16 @@ export function Header({ activeRouteTitle, health, loading, error, onRefresh, us
                   style={{
                     width: '100%',
                     textAlign: 'left',
-                    padding: '8px 16px',
+                    padding: '10px 18px',
                     background: 'none',
                     border: 'none',
                     color: 'var(--status-danger)',
                     cursor: 'pointer',
                     fontSize: '13px',
+                    fontWeight: 600,
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '8px'
+                    gap: '10px'
                   }}
                 >
                   🚪 Sign Out

@@ -53,7 +53,7 @@ export function ScanDetailPage({ scanId, onNavigate }) {
     <div>
       {/* Top Navigation */}
       <div style={{ marginBottom: '16px' }}>
-        <button className="btn btn-secondary" onClick={() => onNavigate('scans')}>
+        <button className="btn-pill-filter active" onClick={() => onNavigate('scans')}>
           ← Back to Scans List
         </button>
       </div>
@@ -88,85 +88,89 @@ export function ScanDetailPage({ scanId, onNavigate }) {
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
           gap: '16px',
-          background: 'var(--bg-app)',
-          padding: '16px',
-          borderRadius: 'var(--radius-md)',
-          border: '1px solid var(--border-subtle)',
+          background: 'rgba(255, 255, 255, 0.45)',
+          backdropFilter: 'blur(10px)',
+          padding: '18px',
+          borderRadius: 'var(--radius-lg)',
+          border: '1px solid var(--border-glass-light)',
           fontSize: '12px'
         }}>
           <div>
-            <div style={{ color: 'var(--text-muted)', marginBottom: '4px' }}>FILE SIZE</div>
-            <div>{scan.file_size_bytes ? `${(scan.file_size_bytes / 1024).toFixed(1)} KB` : 'N/A'}</div>
+            <div style={{ color: 'var(--text-muted)', marginBottom: '4px', fontWeight: '600' }}>FILE SIZE</div>
+            <div style={{ fontWeight: '500' }}>{scan.file_size_bytes ? `${(scan.file_size_bytes / 1024).toFixed(1)} KB` : 'N/A'}</div>
           </div>
 
           <div>
-            <div style={{ color: 'var(--text-muted)', marginBottom: '4px' }}>MIME TYPE</div>
-            <div>{scan.mime_type || 'text/plain'}</div>
+            <div style={{ color: 'var(--text-muted)', marginBottom: '4px', fontWeight: '600' }}>MIME TYPE</div>
+            <div style={{ fontWeight: '500' }}>{scan.mime_type || 'text/plain'}</div>
           </div>
 
           <div>
-            <div style={{ color: 'var(--text-muted)', marginBottom: '4px' }}>SHA-256 DIGEST</div>
-            <div style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>{scan.content_hash || 'N/A'}</div>
+            <div style={{ color: 'var(--text-muted)', marginBottom: '4px', fontWeight: '600' }}>SHA-256 DIGEST</div>
+            <div style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all', fontSize: '11px' }}>{scan.content_hash || 'N/A'}</div>
           </div>
 
           <div>
-            <div style={{ color: 'var(--text-muted)', marginBottom: '4px' }}>STARTED AT</div>
-            <div>{new Date(scan.started_at || scan.created_at).toLocaleString()}</div>
+            <div style={{ color: 'var(--text-muted)', marginBottom: '4px', fontWeight: '600' }}>STARTED AT</div>
+            <div style={{ fontWeight: '500' }}>{new Date(scan.started_at || scan.created_at).toLocaleString()}</div>
           </div>
         </div>
 
         {/* Severity Summary Pills */}
         <div style={{ display: 'flex', gap: '10px', marginTop: '16px', flexWrap: 'wrap' }}>
-          <span className="badge badge-danger">Critical: {criticalCount}</span>
-          <span className="badge badge-warning">High: {highCount}</span>
-          <span className="badge badge-info">Medium: {mediumCount}</span>
-          <span className="badge badge-healthy">Low: {lowCount}</span>
+          <StatusBadge type="danger">Critical: {criticalCount}</StatusBadge>
+          <StatusBadge type="warning">High: {highCount}</StatusBadge>
+          <StatusBadge type="info">Medium: {mediumCount}</StatusBadge>
+          <StatusBadge type="healthy">Low: {lowCount}</StatusBadge>
         </div>
       </div>
 
       {/* Findings Table Panel */}
       <div className="panel">
         <div className="panel-header">
-          <h3>Detected Sensitive-Data Findings ({findings.length})</h3>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Masked for Defense</span>
+          <div>
+            <h3 style={{ margin: 0 }}>Detected Sensitive-Data Findings ({findings.length})</h3>
+            <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)' }}>Masked and sanitized for defense in depth</p>
+          </div>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Automated Pattern Engine</span>
         </div>
 
         {findings.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-secondary)' }}>
+          <div style={{ textAlign: 'center', padding: '36px', color: 'var(--text-secondary)' }}>
             No sensitive data patterns were detected in this file.
           </div>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+          <div className="data-table-container">
+            <table className="data-table">
               <thead>
-                <tr style={{ borderBottom: '1px solid var(--border-medium)', color: 'var(--text-muted)' }}>
-                  <th style={{ padding: '10px 14px' }}>Category</th>
-                  <th style={{ padding: '10px 14px' }}>Severity</th>
-                  <th style={{ padding: '10px 14px' }}>Location</th>
-                  <th style={{ padding: '10px 14px' }}>Redacted / Masked Excerpt</th>
-                  <th style={{ padding: '10px 14px' }}>Rule</th>
+                <tr>
+                  <th>Category</th>
+                  <th>Severity</th>
+                  <th>Location</th>
+                  <th>Redacted / Masked Excerpt</th>
+                  <th>Rule</th>
                 </tr>
               </thead>
               <tbody>
                 {findings.map((finding) => (
-                  <tr key={finding.finding_id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                    <td style={{ padding: '12px 14px', fontWeight: '500' }}>
+                  <tr key={finding.finding_id}>
+                    <td style={{ fontWeight: '600' }}>
                       {finding.category}
                     </td>
-                    <td style={{ padding: '12px 14px' }}>
+                    <td>
                       <StatusBadge type={finding.severity === 'critical' ? 'danger' : finding.severity === 'high' ? 'warning' : 'info'}>
                         {finding.severity.toUpperCase()}
                       </StatusBadge>
                     </td>
-                    <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--accent-cyan)' }}>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--accent-pink)' }}>
                       {finding.location_reference}
                     </td>
-                    <td style={{ padding: '12px 14px', fontFamily: 'var(--font-mono)', fontSize: '12px' }}>
-                      <code style={{ background: 'var(--bg-app)', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}>
+                      <code style={{ background: 'rgba(255, 255, 255, 0.65)', padding: '3px 8px', borderRadius: '6px', border: '1px solid var(--border-glass-light)' }}>
                         {finding.masked_excerpt}
                       </code>
                     </td>
-                    <td style={{ padding: '12px 14px', color: 'var(--text-secondary)', fontSize: '12px' }}>
+                    <td style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
                       {finding.rule_name}
                     </td>
                   </tr>

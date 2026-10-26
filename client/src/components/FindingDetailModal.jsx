@@ -16,32 +16,12 @@ export function FindingDetailModal({ finding, onClose, onEscalate }) {
 
   return (
     <div 
+      className="modal-backdrop"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.75)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-        padding: '20px'
-      }}
     >
-      <div style={{
-        backgroundColor: 'var(--bg-surface)',
-        border: '1px solid var(--border-medium)',
-        borderRadius: 'var(--radius-lg)',
-        width: '100%',
-        maxWidth: '600px',
-        padding: '24px',
-        boxShadow: 'var(--shadow-card)'
-      }}>
+      <div className="modal-content" style={{ maxWidth: '600px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <h3 style={{ fontSize: '18px', fontWeight: '700' }}>Exposure Finding Details</h3>
@@ -72,10 +52,10 @@ export function FindingDetailModal({ finding, onClose, onEscalate }) {
           <div>
             <div style={{ color: 'var(--text-muted)', fontSize: '11px', textTransform: 'uppercase' }}>MASKED EXCERPT (DEFENSIVE REDACTION)</div>
             <div style={{
-              background: 'var(--bg-app)',
-              padding: '10px 14px',
+              background: 'rgba(255, 255, 255, 0.65)',
+              padding: '12px 16px',
               borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--border-subtle)',
+              border: '1px solid var(--border-glass-light)',
               fontFamily: 'var(--font-mono)',
               marginTop: '4px'
             }}>

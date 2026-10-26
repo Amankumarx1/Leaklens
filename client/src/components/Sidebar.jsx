@@ -1,16 +1,16 @@
 import React from 'react';
 
-const NAV_ITEMS = [
+const GENERAL_ITEMS = [
   {
     id: 'dashboard',
     label: 'Dashboard',
     matchRoutes: ['dashboard'],
     icon: (
       <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-        <rect x="3" y="3" width="7" height="7" rx="1" />
-        <rect x="14" y="3" width="7" height="7" rx="1" />
-        <rect x="14" y="14" width="7" height="7" rx="1" />
-        <rect x="3" y="14" width="7" height="7" rx="1" />
+        <rect x="3" y="3" width="7" height="7" rx="2" />
+        <rect x="14" y="3" width="7" height="7" rx="2" />
+        <rect x="14" y="14" width="7" height="7" rx="2" />
+        <rect x="3" y="14" width="7" height="7" rx="2" />
       </svg>
     )
   },
@@ -31,7 +31,8 @@ const NAV_ITEMS = [
     restrictedRoles: ['COMPLIANCE_REVIEWER'],
     icon: (
       <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-        <path d="M12 5v14M5 12h14" />
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 8v8M8 12h8" />
       </svg>
     )
   },
@@ -46,7 +47,10 @@ const NAV_ITEMS = [
         <line x1="12" y1="16" x2="12.01" y2="16" />
       </svg>
     )
-  },
+  }
+];
+
+const OPERATION_ITEMS = [
   {
     id: 'incidents',
     label: 'Incidents',
@@ -69,7 +73,6 @@ const NAV_ITEMS = [
         <polyline points="14 2 14 8 20 8" />
         <line x1="16" y1="13" x2="8" y2="13" />
         <line x1="16" y1="17" x2="8" y2="17" />
-        <polyline points="10 9 9 9 8 9" />
       </svg>
     )
   },
@@ -89,25 +92,43 @@ const NAV_ITEMS = [
 export function Sidebar({ activeRoute, onNavigate, user }) {
   const isCompliance = user?.role === 'COMPLIANCE_REVIEWER';
 
+  const renderNavGroup = (items) => {
+    return items.map(item => {
+      if (item.restrictedRoles && item.restrictedRoles.includes(user?.role)) {
+        return null;
+      }
+
+      const isActive = item.matchRoutes 
+        ? item.matchRoutes.includes(activeRoute) 
+        : activeRoute === item.id;
+
+      return (
+        <button
+          key={item.id}
+          id={`nav-link-${item.id}`}
+          className={`nav-item ${isActive ? 'active' : ''}`}
+          onClick={() => onNavigate(item.id)}
+          aria-current={isActive ? 'page' : undefined}
+          title={`Navigate to ${item.label}`}
+        >
+          {item.icon}
+          <span>{item.label}</span>
+        </button>
+      );
+    });
+  };
+
   return (
     <aside className="app-sidebar">
-      {/* Clickable Brand Logo navigating to Dashboard without reload */}
+      {/* 3D Iridescent Orb Brand Header */}
       <button
         id="btn-sidebar-brand"
         className="sidebar-brand"
         onClick={() => onNavigate('dashboard')}
-        style={{
-          background: 'transparent',
-          border: 'none',
-          padding: '24px 20px',
-          width: '100%',
-          cursor: 'pointer',
-          textAlign: 'left'
-        }}
         title="Return to Security Dashboard"
         aria-label="LeakLens Defensive Security Dashboard"
       >
-        <div className="brand-icon">L</div>
+        <div className="brand-orb" aria-hidden="true" />
         <div className="brand-text">
           <h1>LeakLens</h1>
           <p>Defensive Security</p>
@@ -115,35 +136,20 @@ export function Sidebar({ activeRoute, onNavigate, user }) {
       </button>
 
       <nav className="sidebar-menu" aria-label="Main Navigation">
-        {NAV_ITEMS.map(item => {
-          if (item.restrictedRoles && item.restrictedRoles.includes(user?.role)) {
-            return null; // Hide restricted action button from navigation
-          }
+        <div className="sidebar-section-label">General</div>
+        {renderNavGroup(GENERAL_ITEMS)}
 
-          const isActive = item.matchRoutes 
-            ? item.matchRoutes.includes(activeRoute) 
-            : activeRoute === item.id;
-
-          return (
-            <button
-              key={item.id}
-              id={`nav-link-${item.id}`}
-              className={`nav-item ${isActive ? 'active' : ''}`}
-              onClick={() => onNavigate(item.id)}
-              aria-current={isActive ? 'page' : undefined}
-              title={`Navigate to ${item.label}`}
-            >
-              {item.icon}
-              <span>{item.label}</span>
-            </button>
-          );
-        })}
+        <div className="sidebar-section-label" style={{ marginTop: '14px' }}>Operations</div>
+        {renderNavGroup(OPERATION_ITEMS)}
       </nav>
 
       <div className="sidebar-footer">
-        <div>Role: <strong>{user?.role || 'Guest'}</strong></div>
-        <div style={{ color: isCompliance ? 'var(--status-warning)' : 'var(--accent-cyan)', marginTop: '4px' }}>
-          {isCompliance ? 'Read-Only Audit Mode' : 'Scanner Engaged'}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ color: 'var(--text-muted)' }}>Role</span>
+          <strong style={{ color: 'var(--text-primary)' }}>{user?.role || 'Guest'}</strong>
+        </div>
+        <div style={{ color: isCompliance ? 'var(--status-warning)' : 'var(--status-healthy)', marginTop: '4px', fontWeight: 600 }}>
+          {isCompliance ? 'Read-Only Audit' : 'Active Scanner Mode'}
         </div>
       </div>
     </aside>

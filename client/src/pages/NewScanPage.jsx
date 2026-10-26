@@ -135,15 +135,17 @@ export function NewScanPage({ user, onNavigate }) {
         {/* Success Confirmation State */}
         {scanResult ? (
           <div style={{
-            background: 'var(--bg-app)',
-            border: '1px solid var(--status-healthy)',
+            background: 'rgba(255, 255, 255, 0.8)',
+            backdropFilter: 'var(--glass-blur-heavy)',
+            border: '1px solid rgba(16, 185, 129, 0.4)',
             borderRadius: 'var(--radius-lg)',
             padding: '24px',
-            marginBottom: '20px'
+            marginBottom: '20px',
+            boxShadow: 'var(--shadow-glass)'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
               <span className="health-dot healthy" style={{ width: '12px', height: '12px' }} />
-              <h4 style={{ fontSize: '16px', color: 'var(--status-healthy)', fontWeight: '600' }}>
+              <h4 style={{ fontSize: '16px', color: 'var(--status-healthy)', fontWeight: '700' }}>
                 Scan Completed & Persisted Successfully
               </h4>
             </div>
@@ -181,14 +183,16 @@ export function NewScanPage({ user, onNavigate }) {
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
               style={{
-                border: `2px dashed ${isDragging ? 'var(--accent-cyan)' : 'var(--border-medium)'}`,
-                borderRadius: 'var(--radius-lg)',
-                padding: '40px 20px',
+                border: `2px dashed ${isDragging ? 'var(--accent-cyan)' : 'rgba(203, 213, 225, 0.9)'}`,
+                borderRadius: 'var(--radius-xl)',
+                padding: '48px 24px',
                 textAlign: 'center',
-                backgroundColor: isDragging ? 'var(--accent-cyan-subtle)' : 'var(--bg-app)',
+                backgroundColor: isDragging ? 'rgba(14, 165, 233, 0.12)' : 'rgba(255, 255, 255, 0.6)',
+                backdropFilter: 'var(--glass-blur-light)',
                 cursor: 'pointer',
-                transition: 'all 0.15s ease-in-out',
-                marginBottom: '20px'
+                transition: 'all 0.2s ease-in-out',
+                marginBottom: '20px',
+                boxShadow: 'var(--shadow-glass-sm)'
               }}
             >
               <input
