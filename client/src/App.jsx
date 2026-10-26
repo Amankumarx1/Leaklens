@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import AppLayout from './layouts/AppLayout';
 import LoginPage from './pages/LoginPage';
+import LandingPage from './pages/LandingPage';
 import DashboardPage from './pages/DashboardPage';
 import ScansPage from './pages/ScansPage';
 import NewScanPage from './pages/NewScanPage';
@@ -16,6 +17,8 @@ import useHealth from './hooks/useHealth';
 import { getProfile, logout, getAuthToken } from './services/api';
 
 const ROUTE_TITLES = {
+  landing: 'Product Overview',
+  login: 'Operator Authentication',
   dashboard: 'Security Posture Dashboard',
   scans: 'File Exposure Scans',
   'scans-new': 'Upload & Scan File',
@@ -31,6 +34,8 @@ const ROUTE_TITLES = {
 };
 
 const VALID_ROUTES = [
+  'landing',
+  'login',
   'dashboard',
   'scans',
   'scans-new',
@@ -46,9 +51,9 @@ const VALID_ROUTES = [
 
 function parseHashRoute() {
   const hash = window.location.hash.replace(/^#\/?/, '').trim();
-  if (!hash) return { route: 'dashboard', paramId: null };
+  if (!hash) return { route: 'landing', paramId: null };
   const parts = hash.split('/');
-  const route = parts[0] || 'dashboard';
+  const route = parts[0] || 'landing';
   const paramId = parts[1] || null;
   return {
     route: VALID_ROUTES.includes(route) ? route : 'not-found',
@@ -144,11 +149,11 @@ export function App() {
   const handleLogout = async () => {
     await logout();
     setUser(null);
-    setActiveRoute('dashboard');
-    window.location.hash = '#/dashboard';
+    setActiveRoute('landing');
+    window.location.hash = '#/landing';
   };
 
-  // Render Login view if user is unauthenticated
+  // Render Landing or Login view if user is unauthenticated
   if (authChecking) {
     return (
       <div className="state-center" style={{ minHeight: '100vh', backgroundColor: 'var(--bg-app)' }}>
@@ -159,19 +164,39 @@ export function App() {
   }
 
   if (!user) {
+    const isLoginView = activeRoute === 'login' || window.location.hash.includes('login');
+    if (isLoginView) {
+      return (
+        <LoginPage 
+          onLoginSuccess={(authedUser) => {
+            setUser(authedUser);
+            setActiveRoute('dashboard');
+            window.location.hash = '#/dashboard';
+          }}
+          onNavigateToLanding={() => {
+            setActiveRoute('landing');
+            window.location.hash = '#/landing';
+          }}
+        />
+      );
+    }
+
     return (
-      <LoginPage 
-        onLoginSuccess={(authedUser) => {
-          setUser(authedUser);
-          const { route } = parseHashRoute();
-          setActiveRoute(route === 'not-found' ? 'dashboard' : route);
-        }} 
+      <LandingPage
+        onNavigateToLogin={() => {
+          setActiveRoute('login');
+          window.location.hash = '#/login';
+        }}
       />
     );
   }
 
   const renderCurrentPage = () => {
     switch (activeRoute) {
+      case 'landing':
+        return <LandingPage onNavigateToLogin={() => handleNavigate('dashboard')} />;
+      case 'login':
+        return <DashboardPage health={health} user={user} onNavigate={handleNavigate} />;
       case 'dashboard':
         return <DashboardPage health={health} user={user} onNavigate={handleNavigate} />;
       case 'scans':
