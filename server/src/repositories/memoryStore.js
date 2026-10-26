@@ -44,6 +44,9 @@ export const memoryStore = {
   scan_jobs: [],
   files: [],
   findings: [],
+  incidents: [],
+  incident_findings: [],
+  remediation_actions: [],
   audit_logs: []
 };
 

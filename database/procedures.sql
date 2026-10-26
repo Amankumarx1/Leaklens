@@ -15,8 +15,10 @@ GO
 CREATE PROCEDURE leaklens.sp_resolve_incident
     @incident_id UNIQUEIDENTIFIER,
     @user_id UNIQUEIDENTIFIER,
-    @action_type NVARCHAR(64),
-    @notes NVARCHAR(1024)
+    @action_type NVARCHAR(64) = 'RESOLUTION',
+    @notes NVARCHAR(1024),
+    @verification_outcome NVARCHAR(32) = 'PASSED',
+    @expected_version INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -32,10 +34,14 @@ BEGIN
         RETURN;
     END
 
-    -- Verify incident exists
+    -- Retrieve and lock the target incident record
     DECLARE @current_status NVARCHAR(32);
-    SELECT @current_status = status 
-    FROM leaklens.incidents 
+    DECLARE @current_version INT;
+
+    SELECT 
+        @current_status = status,
+        @current_version = ISNULL(version, 1)
+    FROM leaklens.incidents WITH (UPDLOCK, ROWLOCK)
     WHERE incident_id = @incident_id;
 
     IF @current_status IS NULL
@@ -44,26 +50,25 @@ BEGIN
         RETURN;
     END
 
+    -- Concurrency check: verify version matches if supplied
+    IF @expected_version IS NOT NULL AND @expected_version <> @current_version
+    BEGIN
+        THROW 50005, 'Concurrency conflict: incident was modified by another user.', 1;
+        RETURN;
+    END
+
     -- Prevent invalid transition if incident is already resolved or closed
-    IF @current_status IN ('resolved', 'closed')
+    IF @current_status IN ('RESOLVED', 'CLOSED', 'resolved', 'closed')
     BEGIN
         DECLARE @err_msg NVARCHAR(256) = CONCAT('Cannot resolve incident: current status is already "', @current_status, '".');
         THROW 50003, @err_msg, 1;
         RETURN;
     END
 
-    -- Validate action type enum
-    IF @action_type NOT IN (
-        'secret_revocation',
-        'key_rotation',
-        'access_revocation',
-        'file_quarantine',
-        'false_positive_acknowledgement',
-        'policy_update',
-        'custom'
-    )
+    -- Validate non-empty notes
+    IF @notes IS NULL OR LEN(LTRIM(RTRIM(@notes))) = 0
     BEGIN
-        THROW 50004, 'Invalid action_type provided for remediation.', 1;
+        THROW 50006, 'Resolution summary notes are mandatory for resolving an incident.', 1;
         RETURN;
     END
 
@@ -76,11 +81,13 @@ BEGIN
     BEGIN TRY
         BEGIN TRANSACTION;
 
-        -- Step A: Update Incident Status
+        -- Step A: Update Incident Status and Concurrency Version
         UPDATE leaklens.incidents
         SET 
-            status = 'resolved',
+            status = 'RESOLVED',
             resolved_at = @now,
+            resolution_summary = @notes,
+            version = @current_version + 1,
             updated_at = @now
         WHERE incident_id = @incident_id;
 
@@ -115,7 +122,9 @@ BEGIN
             SELECT 
                 CAST(@incident_id AS NVARCHAR(64)) AS incident_id,
                 @action_type AS action_type,
-                'resolved' AS previous_status_to_resolved,
+                @current_status AS previous_status,
+                'RESOLVED' AS new_status,
+                @verification_outcome AS verification_outcome,
                 @now AS resolved_timestamp
             FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
         );
@@ -131,7 +140,7 @@ BEGIN
         ) VALUES (
             NEWID(),
             @user_id,
-            'incident_resolved',
+            'INCIDENT_RESOLVED',
             'incident',
             CAST(@incident_id AS NVARCHAR(64)),
             @audit_meta,
@@ -143,8 +152,9 @@ BEGIN
         -- Return execution confirmation
         SELECT 
             @incident_id AS incident_id,
-            'resolved' AS status,
+            'RESOLVED' AS status,
             @new_action_id AS remediation_action_id,
+            @current_version + 1 AS version,
             @now AS resolved_at;
 
     END TRY

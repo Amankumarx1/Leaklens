@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { getFindings } from '../services/api';
 import LoadingState from '../components/LoadingState';
 import EmptyState from '../components/EmptyState';
@@ -6,7 +6,7 @@ import ErrorState from '../components/ErrorState';
 import StatusBadge from '../components/StatusBadge';
 import FindingDetailModal from '../components/FindingDetailModal';
 
-export function FindingsPage({ onNavigate }) {
+export function FindingsPage({ onNavigate, user }) {
   const [findings, setFindings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -14,10 +14,30 @@ export function FindingsPage({ onNavigate }) {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [activeFinding, setActiveFinding] = useState(null);
 
-  useEffect(() => {
-    let isMounted = true;
+  const isCompliance = user?.role === 'COMPLIANCE_REVIEWER';
 
-    async function loadFindings() {
+  const fetchFindingsList = useCallback(async () => {
+    try {
+      setError(null);
+      const params = {};
+      if (severityFilter) params.severity = severityFilter;
+      if (categoryFilter) params.category = categoryFilter;
+
+      const res = await getFindings(params);
+      if (res?.success) {
+        setFindings(res.data?.findings || res.data || []);
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to load findings.');
+    } finally {
+      setLoading(false);
+    }
+  }, [severityFilter, categoryFilter]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function load() {
       try {
         setError(null);
         const params = {};
@@ -25,19 +45,23 @@ export function FindingsPage({ onNavigate }) {
         if (categoryFilter) params.category = categoryFilter;
 
         const res = await getFindings(params);
-        if (isMounted && res?.success) {
-          setFindings(res.data || []);
+        if (!ignore && res?.success) {
+          setFindings(res.data?.findings || res.data || []);
         }
       } catch (err) {
-        if (isMounted) setError(err.message);
+        if (!ignore) setError(err.message || 'Failed to load findings.');
       } finally {
-        if (isMounted) setLoading(false);
+        if (!ignore) setLoading(false);
       }
     }
 
-    loadFindings();
-    return () => { isMounted = false; };
+    load();
+    return () => { ignore = true; };
   }, [severityFilter, categoryFilter]);
+
+  const handleEscalate = (findingId) => {
+    onNavigate('incidents-new', findingId);
+  };
 
   return (
     <div>
@@ -155,7 +179,7 @@ export function FindingsPage({ onNavigate }) {
                   <th style={{ padding: '12px 14px' }}>Masked Excerpt</th>
                   <th style={{ padding: '12px 14px' }}>Location</th>
                   <th style={{ padding: '12px 14px' }}>Target File</th>
-                  <th style={{ padding: '12px 14px' }}>Detected At</th>
+                  <th style={{ padding: '12px 14px' }}>Status</th>
                   <th style={{ padding: '12px 14px', textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
@@ -186,13 +210,15 @@ export function FindingsPage({ onNavigate }) {
                     <td style={{ padding: '12px 14px', color: 'var(--text-secondary)' }}>
                       {f.original_filename || 'File'}
                     </td>
-                    <td style={{ padding: '12px 14px', color: 'var(--text-muted)', fontSize: '12px' }}>
-                      {new Date(f.detected_at).toLocaleString()}
+                    <td style={{ padding: '12px 14px' }}>
+                      <StatusBadge type={f.status === 'remediated' ? 'success' : f.status === 'confirmed' ? 'warning' : 'info'}>
+                        {f.status || 'detected'}
+                      </StatusBadge>
                     </td>
-                    <td style={{ padding: '12px 14px', textAlign: 'right' }}>
+                    <td style={{ padding: '12px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                       <button
                         className="btn btn-secondary"
-                        style={{ fontSize: '11px', padding: '3px 8px' }}
+                        style={{ fontSize: '11px', padding: '3px 8px', marginRight: '6px' }}
                         onClick={(e) => {
                           e.stopPropagation();
                           setActiveFinding(f);
@@ -200,6 +226,19 @@ export function FindingsPage({ onNavigate }) {
                       >
                         Inspect
                       </button>
+                      {!isCompliance && f.status !== 'remediated' && (
+                        <button
+                          id={`btn-escalate-${f.finding_id}`}
+                          className="btn btn-primary"
+                          style={{ fontSize: '11px', padding: '3px 8px' }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEscalate(f.finding_id);
+                          }}
+                        >
+                          Escalate
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -211,7 +250,11 @@ export function FindingsPage({ onNavigate }) {
 
       {/* Finding Detail Modal */}
       {activeFinding && (
-        <FindingDetailModal finding={activeFinding} onClose={() => setActiveFinding(null)} />
+        <FindingDetailModal
+          finding={activeFinding}
+          onClose={() => setActiveFinding(null)}
+          onEscalate={!isCompliance && activeFinding.status !== 'remediated' ? () => handleEscalate(activeFinding.finding_id) : undefined}
+        />
       )}
     </div>
   );

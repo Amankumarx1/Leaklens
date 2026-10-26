@@ -148,17 +148,20 @@ BEGIN
         priority NVARCHAR(16) NOT NULL,
         assigned_to UNIQUEIDENTIFIER NULL,
         created_by UNIQUEIDENTIFIER NOT NULL,
+        version INT NOT NULL CONSTRAINT DF_incidents_version DEFAULT 1,
         created_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_incidents_created_at DEFAULT SYSUTCDATETIME(),
         updated_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_incidents_updated_at DEFAULT SYSUTCDATETIME(),
         resolved_at DATETIMEOFFSET NULL,
+        closed_at DATETIMEOFFSET NULL,
+        resolution_summary NVARCHAR(1024) NULL,
         CONSTRAINT PK_incidents PRIMARY KEY CLUSTERED (incident_id),
         CONSTRAINT FK_incidents_assigned_user FOREIGN KEY (assigned_to) 
             REFERENCES leaklens.users (user_id) ON DELETE SET NULL,
         CONSTRAINT FK_incidents_created_user FOREIGN KEY (created_by) 
             REFERENCES leaklens.users (user_id) ON DELETE NO ACTION,
-        CONSTRAINT CK_incidents_status CHECK (status IN ('open', 'under_investigation', 'contained', 'resolved', 'closed')),
-        CONSTRAINT CK_incidents_priority CHECK (priority IN ('critical', 'high', 'medium', 'low')),
-        CONSTRAINT CK_incidents_resolution CHECK (resolved_at IS NULL OR status IN ('resolved', 'closed'))
+        CONSTRAINT CK_incidents_status CHECK (status IN ('OPEN', 'IN_PROGRESS', 'PENDING_VERIFICATION', 'RESOLVED', 'CLOSED', 'open', 'under_investigation', 'contained', 'resolved', 'closed')),
+        CONSTRAINT CK_incidents_priority CHECK (priority IN ('CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'critical', 'high', 'medium', 'low')),
+        CONSTRAINT CK_incidents_resolution CHECK (resolved_at IS NULL OR status IN ('RESOLVED', 'CLOSED', 'resolved', 'closed'))
     );
 END
 GO
@@ -202,6 +205,14 @@ BEGIN
         CONSTRAINT FK_remediation_actions_users FOREIGN KEY (user_id) 
             REFERENCES leaklens.users (user_id) ON DELETE NO ACTION,
         CONSTRAINT CK_remediation_actions_action_type CHECK (action_type IN (
+            'INVESTIGATION',
+            'ASSIGNMENT',
+            'STATUS_CHANGE',
+            'REMEDIATION',
+            'VERIFICATION',
+            'COMMENT',
+            'RESOLUTION',
+            'REOPENED',
             'secret_revocation',
             'key_rotation',
             'access_revocation',

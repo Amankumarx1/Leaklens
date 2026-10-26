@@ -138,6 +138,97 @@ export async function getFindingById(findingId) {
 }
 
 // -----------------------------------------------------------------------------
+// Incident Management & Remediation
+// -----------------------------------------------------------------------------
+export async function getIncidents(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/incidents${query ? `?${query}` : ''}`);
+}
+
+export async function getIncidentById(incidentId) {
+  return request(`/incidents/${incidentId}`);
+}
+
+export async function createIncident(data) {
+  return request('/incidents', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+}
+
+export async function assignIncident(incidentId, assignedTo) {
+  return request(`/incidents/${incidentId}/assignment`, {
+    method: 'PATCH',
+    body: JSON.stringify({ assignedTo })
+  });
+}
+
+export async function updateIncidentStatus(incidentId, status, reason = '', expectedVersion = null) {
+  return request(`/incidents/${incidentId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status, reason, expectedVersion })
+  });
+}
+
+export async function addIncidentAction(incidentId, actionType, notes) {
+  return request(`/incidents/${incidentId}/actions`, {
+    method: 'POST',
+    body: JSON.stringify({ actionType, notes })
+  });
+}
+
+export async function getIncidentActions(incidentId) {
+  return request(`/incidents/${incidentId}/actions`);
+}
+
+export async function recordIncidentVerification(incidentId, outcome, summary) {
+  return request(`/incidents/${incidentId}/verify`, {
+    method: 'POST',
+    body: JSON.stringify({ outcome, summary })
+  });
+}
+
+export async function resolveIncident(incidentId, { resolutionSummary, verificationOutcome = 'PASSED', expectedVersion = null }) {
+  return request(`/incidents/${incidentId}/resolve`, {
+    method: 'POST',
+    body: JSON.stringify({ resolutionSummary, verificationOutcome, expectedVersion })
+  });
+}
+
+export async function reopenIncident(incidentId, justification, expectedVersion = null) {
+  return request(`/incidents/${incidentId}/reopen`, {
+    method: 'POST',
+    body: JSON.stringify({ justification, expectedVersion })
+  });
+}
+
+export async function associateFindingToIncident(incidentId, findingId) {
+  return request(`/incidents/${incidentId}/findings`, {
+    method: 'POST',
+    body: JSON.stringify({ findingId })
+  });
+}
+
+export async function disassociateFindingFromIncident(incidentId, findingId, reason = '') {
+  return request(`/incidents/${incidentId}/findings/${findingId}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ reason })
+  });
+}
+
+export async function getIncidentMetrics() {
+  return request('/incidents/metrics');
+}
+
+export async function getUnassociatedFindings() {
+  return request('/incidents/unassociated-findings');
+}
+
+export async function getEligibleAssignees() {
+  return request('/incidents/assignees');
+}
+
+// -----------------------------------------------------------------------------
 // Analytics & Audit
 // -----------------------------------------------------------------------------
 export async function getDashboardAnalytics() {
@@ -160,6 +251,21 @@ export default {
   getScanFindings,
   getFindings,
   getFindingById,
+  getIncidents,
+  getIncidentById,
+  createIncident,
+  assignIncident,
+  updateIncidentStatus,
+  addIncidentAction,
+  getIncidentActions,
+  recordIncidentVerification,
+  resolveIncident,
+  reopenIncident,
+  associateFindingToIncident,
+  disassociateFindingFromIncident,
+  getIncidentMetrics,
+  getUnassociatedFindings,
+  getEligibleAssignees,
   getDashboardAnalytics,
   getAuditLogs,
   setAuthToken,

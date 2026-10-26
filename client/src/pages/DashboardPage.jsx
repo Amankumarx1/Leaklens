@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { getDashboardAnalytics } from '../services/api';
+import React, { useState, useEffect, useCallback } from 'react';
+import { getDashboardAnalytics, getIncidentMetrics } from '../services/api';
 import EmptyState from '../components/EmptyState';
 import LoadingState from '../components/LoadingState';
 import ErrorState from '../components/ErrorState';
@@ -7,35 +7,64 @@ import StatusBadge from '../components/StatusBadge';
 
 export function DashboardPage({ health, user, onNavigate }) {
   const [metrics, setMetrics] = useState(null);
+  const [incidentMetrics, setIncidentMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    let isMounted = true;
+  const fetchMetrics = useCallback(async () => {
+    try {
+      setError(null);
+      const [dashRes, incRes] = await Promise.all([
+        getDashboardAnalytics(),
+        getIncidentMetrics().catch(() => null)
+      ]);
 
-    async function loadDashboard() {
+      if (dashRes?.success) {
+        setMetrics(dashRes.data);
+      }
+      if (incRes?.success && incRes?.data?.metrics) {
+        setIncidentMetrics(incRes.data.metrics);
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to load telemetry.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function load() {
       try {
         setError(null);
-        const res = await getDashboardAnalytics();
-        if (isMounted && res?.success) {
-          setMetrics(res.data);
+        const [dashRes, incRes] = await Promise.all([
+          getDashboardAnalytics(),
+          getIncidentMetrics().catch(() => null)
+        ]);
+
+        if (!ignore && dashRes?.success) {
+          setMetrics(dashRes.data);
+        }
+        if (!ignore && incRes?.success && incRes?.data?.metrics) {
+          setIncidentMetrics(incRes.data.metrics);
         }
       } catch (err) {
-        if (isMounted) setError(err.message);
+        if (!ignore) setError(err.message || 'Failed to load telemetry.');
       } finally {
-        if (isMounted) setLoading(false);
+        if (!ignore) setLoading(false);
       }
     }
 
-    loadDashboard();
-    return () => { isMounted = false; };
+    load();
+    return () => { ignore = true; };
   }, []);
 
   if (loading && !metrics) {
     return <LoadingState message="Loading security posture metrics..." />;
   }
 
-  if (error) {
+  if (error && !metrics) {
     return <ErrorState title="Failed to Load Dashboard Telemetry" message={error} onRetry={fetchMetrics} />;
   }
 
@@ -65,17 +94,21 @@ export function DashboardPage({ health, user, onNavigate }) {
         </div>
 
         <div className="metric-card">
-          <div className="metric-card-title">Critical & High Severity</div>
-          <div className="metric-card-value" style={{ color: (criticalCount + highCount) > 0 ? 'var(--status-warning)' : 'var(--text-primary)' }}>
-            {criticalCount + highCount}
+          <div className="metric-card-title">Active Incidents</div>
+          <div className="metric-card-value" style={{ color: (incidentMetrics?.openIncidents + incidentMetrics?.inProgressIncidents) > 0 ? 'var(--status-warning)' : 'var(--accent-cyan)' }}>
+            {(incidentMetrics?.openIncidents || 0) + (incidentMetrics?.inProgressIncidents || 0)}
           </div>
-          <div className="metric-card-meta">Critical: {criticalCount} | High: {highCount}</div>
+          <div className="metric-card-meta">
+            {incidentMetrics ? `Pending Verif: ${incidentMetrics.pendingVerificationIncidents || 0} | Resolved: ${incidentMetrics.resolvedIncidents || 0}` : 'Incident triage active'}
+          </div>
         </div>
 
         <div className="metric-card">
-          <div className="metric-card-title">Detection Signatures</div>
-          <div className="metric-card-value">4</div>
-          <div className="metric-card-meta">Active rules in engine</div>
+          <div className="metric-card-title">Critical & High Severity</div>
+          <div className="metric-card-value" style={{ color: (criticalCount + highCount) > 0 ? 'var(--status-danger)' : 'var(--text-primary)' }}>
+            {criticalCount + highCount}
+          </div>
+          <div className="metric-card-meta">Critical: {criticalCount} | High: {highCount}</div>
         </div>
       </div>
 
@@ -101,14 +134,17 @@ export function DashboardPage({ health, user, onNavigate }) {
           <div className="panel-header">
             <h3>Exposure Severity & Category Breakdown</h3>
             <div style={{ display: 'flex', gap: '8px' }}>
-              {canScan && (
-                <button className="btn btn-primary" onClick={() => onNavigate('scans-new')}>
-                  + Scan Another File
-                </button>
-              )}
+              <button className="btn btn-secondary" onClick={() => onNavigate('incidents')}>
+                View Incidents ({incidentMetrics?.totalIncidents || 0})
+              </button>
               <button className="btn btn-secondary" onClick={() => onNavigate('findings')}>
                 Inspect Findings ({totalFindings})
               </button>
+              {canScan && (
+                <button className="btn btn-primary" onClick={() => onNavigate('scans-new')}>
+                  + Scan File
+                </button>
+              )}
             </div>
           </div>
 
@@ -168,21 +204,21 @@ export function DashboardPage({ health, user, onNavigate }) {
 
           <div style={{ background: 'var(--bg-app)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <strong style={{ fontSize: '13px' }}>Backend RBAC Matrix</strong>
-              <StatusBadge type="healthy">{user?.role || 'Active'}</StatusBadge>
+              <strong style={{ fontSize: '13px' }}>Atomic Incident Resolution</strong>
+              <StatusBadge type="healthy">sp_resolve_incident</StatusBadge>
             </div>
             <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-              Scan initiation strictly gated to ADMIN and ANALYST tiers. Compliance Reviewer restricted to read-only views.
+              Transactional state progression, finding remediation updates, and immutable audit logs executed atomically.
             </p>
           </div>
 
           <div style={{ background: 'var(--bg-app)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <strong style={{ fontSize: '13px' }}>3NF SQL Persistence</strong>
-              <StatusBadge type="healthy">Normalized</StatusBadge>
+              <strong style={{ fontSize: '13px' }}>Optimistic Concurrency (v2)</strong>
+              <StatusBadge type="healthy">Active</StatusBadge>
             </div>
             <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-              Scans, files, and findings mapped via foreign key constraints with zero row duplication anomalies.
+              Version token validation prevents conflicting simultaneous status changes across SOC analyst teams.
             </p>
           </div>
         </div>

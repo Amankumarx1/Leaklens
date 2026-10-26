@@ -16,7 +16,7 @@ describe('Routing & Access Control Foundation', () => {
   });
 
   it('should require authentication (401) for protected domain routes', async () => {
-    const protectedEndpoints = ['/api/scans', '/api/findings', '/api/analytics/dashboard', '/api/audit-logs'];
+    const protectedEndpoints = ['/api/scans', '/api/findings', '/api/incidents', '/api/analytics/dashboard', '/api/audit-logs'];
 
     for (const endpoint of protectedEndpoints) {
       const res = await request(app).get(endpoint);
@@ -26,8 +26,8 @@ describe('Routing & Access Control Foundation', () => {
     }
   });
 
-  it('should return 200 with under-development notice for Phase 3 placeholder endpoints', async () => {
-    const endpoints = ['/api/incidents', '/api/rules'];
+  it('should return 200 with under-development notice for Phase 4 placeholder endpoints', async () => {
+    const endpoints = ['/api/rules'];
 
     for (const endpoint of endpoints) {
       const res = await request(app).get(endpoint);

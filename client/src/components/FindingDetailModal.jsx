@@ -95,7 +95,20 @@ export function FindingDetailModal({ finding, onClose }) {
           </div>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '24px' }}>
+          {onEscalate && (
+            <button
+              id="btn-modal-escalate"
+              className="btn btn-secondary"
+              style={{ color: 'var(--status-warning)' }}
+              onClick={() => {
+                onClose();
+                onEscalate();
+              }}
+            >
+              Escalate to Incident
+            </button>
+          )}
           <button className="btn btn-primary" onClick={onClose}>
             Close Inspector
           </button>

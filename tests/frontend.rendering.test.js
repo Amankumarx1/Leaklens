@@ -29,6 +29,9 @@ describe('Frontend Application Shell & Navigation Structure', () => {
       path.join(clientSrc, 'pages', 'NewScanPage.jsx'),
       path.join(clientSrc, 'pages', 'ScanDetailPage.jsx'),
       path.join(clientSrc, 'pages', 'FindingsPage.jsx'),
+      path.join(clientSrc, 'pages', 'IncidentsPage.jsx'),
+      path.join(clientSrc, 'pages', 'NewIncidentPage.jsx'),
+      path.join(clientSrc, 'pages', 'IncidentDetailPage.jsx'),
       path.join(clientSrc, 'pages', 'AuditLogsPage.jsx'),
       path.join(clientSrc, 'pages', 'SettingsPage.jsx'),
       path.join(clientSrc, 'services', 'api.js'),
@@ -49,6 +52,9 @@ describe('Frontend Application Shell & Navigation Structure', () => {
       'scans-new',
       'scan-detail',
       'findings',
+      'incidents',
+      'incidents-new',
+      'incident-detail',
       'audit-logs',
       'settings'
     ];

@@ -41,7 +41,25 @@ export async function findById(userId) {
   return safeUser;
 }
 
+export async function getEligibleAssignees() {
+  const dbHealth = await checkDatabaseHealth();
+  if (dbHealth.isHealthy) {
+    const result = await executeQuery(
+      `SELECT user_id, display_name, email, role 
+       FROM leaklens.users 
+       WHERE is_active = 1 AND role IN ('ADMIN', 'ANALYST')
+       ORDER BY display_name ASC`
+    );
+    return result.recordset || [];
+  }
+
+  return memoryStore.users
+    .filter(u => u.is_active && ['ADMIN', 'ANALYST'].includes(u.role))
+    .map(({ password_hash, ...safeUser }) => ({ ...safeUser }));
+}
+
 export default {
   findByEmail,
-  findById
+  findById,
+  getEligibleAssignees
 };

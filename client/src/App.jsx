@@ -6,6 +6,9 @@ import ScansPage from './pages/ScansPage';
 import NewScanPage from './pages/NewScanPage';
 import ScanDetailPage from './pages/ScanDetailPage';
 import FindingsPage from './pages/FindingsPage';
+import IncidentsPage from './pages/IncidentsPage';
+import NewIncidentPage from './pages/NewIncidentPage';
+import IncidentDetailPage from './pages/IncidentDetailPage';
 import AuditLogsPage from './pages/AuditLogsPage';
 import SettingsPage from './pages/SettingsPage';
 import useHealth from './hooks/useHealth';
@@ -17,6 +20,9 @@ const ROUTE_TITLES = {
   'scans-new': 'Upload & Scan File',
   'scan-detail': 'Scan Results & Evidence',
   findings: 'Sensitive-Data Findings Register',
+  incidents: 'Incident Response & Remediation',
+  'incidents-new': 'Create Security Incident',
+  'incident-detail': 'Incident Response Workspace',
   'audit-logs': 'Defensive Audit Trail',
   settings: 'System Configuration'
 };
@@ -26,6 +32,8 @@ export function App() {
   const [authChecking, setAuthChecking] = useState(true);
   const [activeRoute, setActiveRoute] = useState('dashboard');
   const [selectedScanId, setSelectedScanId] = useState(null);
+  const [selectedIncidentId, setSelectedIncidentId] = useState(null);
+  const [selectedFindingId, setSelectedFindingId] = useState(null);
 
   const { health, loading: healthLoading, error: healthError, refetch: refetchHealth } = useHealth(20000);
 
@@ -60,7 +68,9 @@ export function App() {
   const handleNavigate = (route, paramId = null) => {
     setActiveRoute(route);
     if (paramId) {
-      setSelectedScanId(paramId);
+      if (route === 'scan-detail') setSelectedScanId(paramId);
+      if (route === 'incident-detail') setSelectedIncidentId(paramId);
+      if (route === 'incidents-new') setSelectedFindingId(paramId);
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -103,7 +113,13 @@ export function App() {
       case 'scan-detail':
         return <ScanDetailPage scanId={selectedScanId} onNavigate={handleNavigate} />;
       case 'findings':
-        return <FindingsPage onNavigate={handleNavigate} />;
+        return <FindingsPage user={user} onNavigate={handleNavigate} />;
+      case 'incidents':
+        return <IncidentsPage user={user} onNavigate={handleNavigate} />;
+      case 'incidents-new':
+        return <NewIncidentPage user={user} onNavigate={handleNavigate} initialFindingId={selectedFindingId} />;
+      case 'incident-detail':
+        return <IncidentDetailPage incidentId={selectedIncidentId} user={user} onNavigate={handleNavigate} />;
       case 'audit-logs':
         return <AuditLogsPage />;
       case 'settings':
