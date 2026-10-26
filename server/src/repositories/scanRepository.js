@@ -34,19 +34,20 @@ export async function createScanJob({ scan_id, created_by, status = 'in_progress
   return { scan_id: id, status, started_at: now };
 }
 
-export async function createFileRecord({ file_id, scan_id, original_filename, content_hash, file_size_bytes, mime_type }) {
+export async function createFileRecord({ file_id, scan_id, original_filename, blob_path = null, content_hash, file_size_bytes, mime_type }) {
   const id = file_id || crypto.randomUUID();
   const now = new Date().toISOString();
 
   const dbHealth = await checkDatabaseHealth();
   if (dbHealth.isHealthy) {
     await executeQuery(
-      `INSERT INTO leaklens.files (file_id, scan_id, original_filename, content_hash, file_size_bytes, mime_type, created_at)
-       VALUES (@file_id, @scan_id, @original_filename, @content_hash, @file_size_bytes, @mime_type, @created_at)`,
+      `INSERT INTO leaklens.files (file_id, scan_id, original_filename, blob_path, content_hash, file_size_bytes, mime_type, created_at)
+       VALUES (@file_id, @scan_id, @original_filename, @blob_path, @content_hash, @file_size_bytes, @mime_type, @created_at)`,
       {
         file_id: id,
         scan_id,
         original_filename,
+        blob_path,
         content_hash,
         file_size_bytes,
         mime_type,
@@ -58,6 +59,7 @@ export async function createFileRecord({ file_id, scan_id, original_filename, co
       file_id: id,
       scan_id,
       original_filename,
+      blob_path,
       content_hash,
       file_size_bytes,
       mime_type,
@@ -65,7 +67,7 @@ export async function createFileRecord({ file_id, scan_id, original_filename, co
     });
   }
 
-  return { file_id: id };
+  return { file_id: id, blob_path };
 }
 
 export async function createFindingsBatch(file_id, findings = []) {
@@ -205,6 +207,7 @@ export async function getScanById(scan_id) {
          u.email AS created_by_email,
          fl.file_id,
          fl.original_filename,
+         fl.blob_path,
          fl.content_hash,
          fl.file_size_bytes,
          fl.mime_type
@@ -229,6 +232,7 @@ export async function getScanById(scan_id) {
     created_by_email: user?.email || '',
     file_id: file?.file_id,
     original_filename: file?.original_filename || 'unknown_file',
+    blob_path: file?.blob_path || null,
     content_hash: file?.content_hash || '',
     file_size_bytes: file?.file_size_bytes || 0,
     mime_type: file?.mime_type || 'text/plain'

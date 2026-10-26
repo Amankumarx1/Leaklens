@@ -4,27 +4,46 @@ import env from '../config/env.js';
 let poolPromise = null;
 let activePool = null;
 
+// Transient error codes common to Azure SQL Database during failovers/throttling
+const TRANSIENT_ERROR_CODES = new Set([
+  4060, 40197, 40501, 40613, 49918, 49919, 49920, 11001
+]);
+
 /**
- * MSSQL Connection Pool Configuration
+ * Builds MSSQL Connection Pool Configuration based on authentication mode.
+ * Supports Azure Managed Identity (DefaultAzureCredential) or standard credentials.
  */
-const sqlConfig = {
-  server: env.DB.server,
-  port: env.DB.port,
-  database: env.DB.database,
-  user: env.DB.user,
-  password: env.DB.password,
-  options: {
-    encrypt: env.DB.options.encrypt,
-    trustServerCertificate: env.DB.options.trustServerCertificate,
-    connectTimeout: env.DB.options.connectTimeout,
-    requestTimeout: env.DB.options.requestTimeout
-  },
-  pool: {
-    max: env.DB.pool.max,
-    min: env.DB.pool.min,
-    idleTimeoutMillis: env.DB.pool.idleTimeoutMillis
+function buildSqlConfig() {
+  const config = {
+    server: env.DB.server,
+    port: env.DB.port,
+    database: env.DB.database,
+    options: {
+      encrypt: env.DB.options.encrypt,
+      trustServerCertificate: env.DB.options.trustServerCertificate,
+      connectTimeout: env.DB.options.connectTimeout,
+      requestTimeout: env.DB.options.requestTimeout
+    },
+    pool: {
+      max: env.DB.pool.max,
+      min: env.DB.pool.min,
+      idleTimeoutMillis: env.DB.pool.idleTimeoutMillis
+    }
+  };
+
+  if (env.DB.authType === 'azure-active-directory-default') {
+    config.authentication = {
+      type: 'azure-active-directory-default'
+    };
+  } else {
+    config.user = env.DB.user;
+    config.password = env.DB.password;
   }
-};
+
+  return config;
+}
+
+const sqlConfig = buildSqlConfig();
 
 /**
  * Initializes and retrieves the singleton MSSQL Connection Pool.
@@ -47,7 +66,7 @@ export async function getPool() {
       .then(p => {
         activePool = p;
         if (!env.IS_TEST) {
-          console.log(`[MSSQL] Connected successfully to database: ${env.DB.database} on ${env.DB.server}:${env.DB.port}`);
+          console.log(`[MSSQL] Connected successfully to database: ${env.DB.database} on ${env.DB.server}:${env.DB.port} (Auth: ${env.DB.authType})`);
         }
         return p;
       })
@@ -98,30 +117,58 @@ export async function checkDatabaseHealth() {
 }
 
 /**
- * Executes a parameterized query using the connection pool.
+ * Helper to determine if an error is transient and retryable.
+ */
+function isTransientError(err) {
+  if (!err) return false;
+  if (err.number && TRANSIENT_ERROR_CODES.has(err.number)) return true;
+  if (['ETIMEOUT', 'ECONNRESET', 'ESOCKETTIMEDOUT'].includes(err.code)) return true;
+  return false;
+}
+
+/**
+ * Executes a parameterized query using the connection pool with transient retry support.
  * Prevents SQL injection by enforcing parameter binding.
  *
  * @param {string} queryString - T-SQL query text with @parameters
  * @param {Record<string, { type?: any, value: any } | any>} params - Parameter map
+ * @param {number} [maxRetries=2] - Number of retry attempts on transient failure
  * @returns {Promise<sql.IResult<any>>}
  */
-export async function executeQuery(queryString, params = {}) {
-  const pool = await getPool();
-  const request = pool.request();
+export async function executeQuery(queryString, params = {}, maxRetries = 2) {
+  let attempt = 0;
 
-  for (const [key, paramDef] of Object.entries(params)) {
-    if (paramDef && typeof paramDef === 'object' && 'value' in paramDef) {
-      if (paramDef.type) {
-        request.input(key, paramDef.type, paramDef.value);
-      } else {
-        request.input(key, paramDef.value);
+  while (attempt <= maxRetries) {
+    try {
+      const pool = await getPool();
+      const request = pool.request();
+
+      for (const [key, paramDef] of Object.entries(params)) {
+        if (paramDef && typeof paramDef === 'object' && 'value' in paramDef) {
+          if (paramDef.type) {
+            request.input(key, paramDef.type, paramDef.value);
+          } else {
+            request.input(key, paramDef.value);
+          }
+        } else {
+          request.input(key, paramDef);
+        }
       }
-    } else {
-      request.input(key, paramDef);
+
+      return await request.query(queryString);
+    } catch (err) {
+      attempt++;
+      if (attempt <= maxRetries && isTransientError(err)) {
+        const delayMs = Math.min(1000 * Math.pow(2, attempt), 4000);
+        if (!env.IS_TEST) {
+          console.warn(`[MSSQL Transient Error]: ${err.message}. Retrying query in ${delayMs}ms (attempt ${attempt}/${maxRetries})...`);
+        }
+        await new Promise(res => setTimeout(res, delayMs));
+      } else {
+        throw err;
+      }
     }
   }
-
-  return request.query(queryString);
 }
 
 /**

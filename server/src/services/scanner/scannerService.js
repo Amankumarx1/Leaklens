@@ -4,10 +4,14 @@ import { scanItems } from './scannerEngine.js';
 import ruleRepository from '../../repositories/ruleRepository.js';
 import scanRepository from '../../repositories/scanRepository.js';
 import auditRepository from '../../repositories/auditRepository.js';
+import { generateSafeBlobPath, uploadFile, deleteBlob } from '../storage/blobStorageService.js';
 
 /**
  * Orchestrates the end-to-end scanning lifecycle:
- * Parse -> Load Rules -> Detect & Mask -> Persist Scan & Findings -> Audit Trail
+ * Parse -> Upload to Private Storage -> Load Rules -> Detect & Mask -> Persist Scan & Findings -> Audit Trail
+ *
+ * Implements compensating cleanup if any downstream SQL or processing failure occurs,
+ * ensuring no orphaned storage objects remain in Azure Blob Storage.
  *
  * @param {object} params
  * @param {string} params.userId - Authenticated user initiating the scan
@@ -27,6 +31,7 @@ export async function executeScan({ userId, filename, buffer }) {
   const contentHash = crypto.createHash('sha256').update(buffer).digest('hex');
   const scanId = crypto.randomUUID();
   const fileId = crypto.randomUUID();
+  let uploadedBlobPath = null;
 
   // 1. Initialize Scan Job Record (status: in_progress)
   await scanRepository.createScanJob({
@@ -48,31 +53,46 @@ export async function executeScan({ userId, filename, buffer }) {
     // 2. Parse File Content based on extension (.txt, .json, .csv)
     const parsed = parseFileContent(filename, buffer);
 
-    // 3. Persist File Metadata Record
+    // 3. Store file in Private Azure Blob Storage with randomized, non-reversible path
+    const safeBlobPath = generateSafeBlobPath(scanId, fileId);
+    await uploadFile({
+      blobPath: safeBlobPath,
+      buffer,
+      mimeType: parsed.mimeType,
+      metadata: {
+        scan_id: scanId,
+        file_id: fileId,
+        content_hash: contentHash
+      }
+    });
+    uploadedBlobPath = safeBlobPath;
+
+    // 4. Persist File Metadata Record with storage blob reference
     await scanRepository.createFileRecord({
       file_id: fileId,
       scan_id: scanId,
       original_filename: filename,
+      blob_path: safeBlobPath,
       content_hash: contentHash,
       file_size_bytes: buffer.length,
       mime_type: parsed.mimeType
     });
 
-    // 4. Load Active Detection Rules from Database/Repository
+    // 5. Load Active Detection Rules from Database/Repository
     const rules = await ruleRepository.getEnabledRules();
 
-    // 5. Run Detection Engine & Mask Excerpts
+    // 6. Run Detection Engine & Mask Excerpts
     const rawFindings = scanItems(parsed.items, rules);
 
-    // 6. Persist Findings Batch to Relational Database
+    // 7. Persist Findings Batch to Relational Database
     const persistedFindings = await scanRepository.createFindingsBatch(fileId, rawFindings);
 
-    // 7. Complete Scan Job
+    // 8. Complete Scan Job
     await scanRepository.updateScanStatus(scanId, {
       status: 'completed'
     });
 
-    // 8. Log scan completion audit event
+    // 9. Log scan completion audit event
     await auditRepository.createAuditEntry({
       user_id: userId,
       event_type: 'scan_completed',
@@ -91,6 +111,7 @@ export async function executeScan({ userId, filename, buffer }) {
       file: {
         file_id: fileId,
         original_filename: filename,
+        blob_path: safeBlobPath,
         content_hash: contentHash,
         file_size_bytes: buffer.length,
         mime_type: parsed.mimeType
@@ -105,6 +126,15 @@ export async function executeScan({ userId, filename, buffer }) {
       findings: persistedFindings
     };
   } catch (err) {
+    // Compensating Cleanup: Delete uploaded blob if downstream parsing, rules, or DB fails
+    if (uploadedBlobPath) {
+      try {
+        await deleteBlob(uploadedBlobPath);
+      } catch (cleanupErr) {
+        console.warn(`[Compensating Storage Cleanup Failed]: ${cleanupErr.message}`);
+      }
+    }
+
     // Fail-safe transition to failed state
     await scanRepository.updateScanStatus(scanId, {
       status: 'failed',

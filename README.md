@@ -1,43 +1,51 @@
 # LeakLens — Authorized Data Exposure Detection & Response
 
-[![Test Suite](https://img.shields.io/badge/tests-67%20passed-10b981.svg)]()
+[![Test Suite](https://img.shields.io/badge/tests-84%20passed-10b981.svg)]()
 [![Frontend](https://img.shields.io/badge/frontend-React%2019%20%2B%20Vite-06b6d4.svg)]()
 [![Backend](https://img.shields.io/badge/backend-Express%204%20%2B%20Node.js-38bdf8.svg)]()
 [![Database](https://img.shields.io/badge/database-Azure%20SQL%20%2F%20MSSQL-0078d4.svg)]()
+[![Cloud](https://img.shields.io/badge/cloud-Microsoft%20Azure-0078d4.svg)]()
 [![Security](https://img.shields.io/badge/normalization-3NF%20Compliant-10b981.svg)]()
-[![Phase](https://img.shields.io/badge/phase-3%20Incident%20Response%20Verified-blue.svg)]()
+[![Phase](https://img.shields.io/badge/phase-4%20Azure%20Cloud%20Verified-blue.svg)]()
 
-> **Defensive Cybersecurity Platform** designed to detect sensitive-data exposures (API keys, credentials, tokens, PII) in authorized repositories and files, mask findings, manage containment incidents, maintain tamper-resistant audit trails, and generate security analytics.
+> **Defensive Cybersecurity Platform** designed to detect sensitive-data exposures (API keys, credentials, tokens, PII) in authorized repositories and files, mask findings, manage containment incidents, maintain tamper-resistant audit trails, and generate security analytics with native **Microsoft Azure** integration.
 
 ---
 
-## 1. Project Overview & Phase 3 Capabilities
+## 1. Project Overview & Phase 4 Architecture
 
-LeakLens establishes a defensive cybersecurity posture for organizations by inspecting authorized files for accidental secret exposure and managing containment workflows through resolution.
+LeakLens establishes a defensive cybersecurity posture for organizations by inspecting authorized files for accidental secret exposure and managing containment workflows through verified resolution.
 
-**Phase 3 completes the comprehensive incident response and remediation subsystem:**
+**Phase 4 integrates the platform with Microsoft Azure and establishes production cloud readiness:**
 ```
-Detected Finding ➔ Incident Escalation ➔ Finding Association ➔ Analyst Assignment 
-  ➔ Investigation Notes ➔ Remediation Actions ➔ Independent Verification Check 
-  ➔ Transactional Resolution (sp_resolve_incident) ➔ Audit Trails & Analytics
+[ Browser / Analyst ] ──(HTTPS)──> [ Azure App Service ] ──(Managed Identity)──> [ Azure Blob Storage (Private) ]
+                                          │                                  ──> [ Azure Key Vault (Secrets) ]
+                                          └──(Encrypted TDS / Transient Retry)──> [ Azure SQL Database (3NF) ]
 ```
 
-### Key Pillars
-- **Strict Finite-State Machine (FSM):** Incident status transitions strictly enforced (`OPEN` $\to$ `IN_PROGRESS` $\to$ `PENDING_VERIFICATION` $\to$ `RESOLVED` $\to$ `CLOSED`).
-- **Atomic Incident Resolution (`sp_resolve_incident`):** Stored procedure executing incident status change, finding remediation status update, remediation action recording, and audit trail generation within an atomic database transaction.
-- **Optimistic Concurrency Control:** Version-token validation (`version INT`) prevents conflicting concurrent updates across security operations center (SOC) analysts.
-- **Zero Secondary Exposure:** Matched secrets are masked in-memory before entering persistent finding records or logs. Plaintext secrets are never stored.
-- **Auditable Accountability:** Full traceability across user authentication, scan executions, rule evaluations, assignments, remediation actions, and resolutions.
+### Core Cloud Capabilities
+- **Single-Origin Production Hosting:** The Express backend serves the compiled React SPA directly from `client/dist` with `trust proxy` enabled for Azure reverse proxies, eliminating CORS vulnerabilities.
+- **Private Azure Blob Storage:** Authorized files are stored in private container `leaklens-scans` (anonymous public access completely disabled) using non-reversible random paths: `scans/{scan_id}/{file_id}.bin`.
+- **Compensating Failure Recovery:** Dual-phase failure rollback guarantees that if downstream parsing or SQL persistence fails, the uploaded storage blob is immediately deleted, preventing orphaned sensitive files.
+- **Azure Key Vault & Managed Identity:** Zero secrets in source code. Runtime secrets (`SESSION_SECRET`, `JWT_SECRET`, `DB_PASSWORD`) are retrieved using `DefaultAzureCredential` with local in-memory caching and development fallback.
+- **Azure SQL Hardening:** Enforces TLS encryption (`encrypt: true`), strict certificate validation in production (`trustServerCertificate: false`), connection pooling, and exponential backoff retry for transient failovers.
+- **Cloud Probes:** Independent liveness probe (`GET /api/health`) and readiness probe (`GET /api/health/ready`) with complete redaction of internal credentials and hostnames.
+- **Infrastructure as Code (IaC):** Modular Bicep template (`infra/azure/main.bicep`) with academic/free-tier cost sizing (Linux B1/F1, Azure SQL Basic 5 DTU, Storage LRS).
 
 ---
 
 ## 2. Technology Stack
 
 - **Frontend:** React 19, Vite 8, Vanilla CSS design system (Dark navy `#080c14` with precision cyan `#06b6d4` accents, WCAG AA compliant).
-- **Backend:** Node.js v20+ / v24+ LTS with Express 4, ES Modules (`"type": "module"`), centralized fail-fast configuration.
-- **Database:** Microsoft SQL Server 2022+ / Azure SQL Database using `mssql` client with parameterized queries and transactional atomicity. (Includes an automated in-memory repository store for local offline testing).
-- **Architecture:** Modular Monolith with clean domain separation (`scanner/`, `parsers/`, `rules/`, `incidents/`, `repositories/`).
-- **Testing & Static Analysis:** Vitest, Supertest, Oxlint.
+- **Backend:** Node.js v20+ LTS with Express 4, ES Modules (`"type": "module"`), centralized fail-fast configuration.
+- **Cloud Persistence:**
+  - **Azure SQL Database / MSSQL:** 9 normalized 3NF tables, constraints, `vw_exposure_analytics`, and atomic stored procedure `sp_resolve_incident`.
+  - **Azure Blob Storage:** Private object storage for authorized scans with non-reversible paths.
+  - **Azure Key Vault:** Secret storage with Azure RBAC (`Key Vault Secrets User`).
+- **Cloud Identity:** Microsoft Entra ID System-Assigned Managed Identity (`DefaultAzureCredential`).
+- **Infrastructure as Code:** Azure Bicep templates (`infra/azure/`).
+- **CI/CD:** GitHub Actions workflows (`.github/workflows/ci.yml` and `deploy.yml`) with OIDC federated credentials.
+- **Testing & Static Analysis:** Vitest (84 tests passing across 13 suites), Supertest, Oxlint.
 
 ---
 
@@ -66,184 +74,122 @@ Permissions are strictly enforced on backend API routes using `requireRole(...)`
 ```
 Leaklens/
 ├── client/                     # Frontend Single Page Application (React + Vite)
-│   ├── src/
-│   │   ├── components/         # Header, Sidebar, FindingDetailModal, StatusBadge, etc.
-│   │   ├── layouts/            # AppLayout authenticated shell
-│   │   ├── pages/              # Dashboard, Scans, NewScan, ScanDetail, Findings,
-│   │   │                       # IncidentsPage, NewIncidentPage, IncidentDetailPage, AuditLogs, Settings
-│   │   ├── services/           # API client with Cookie/JWT handling (api.js)
-│   │   ├── hooks/              # useHealth hook
-│   │   ├── App.jsx             # Shell state & client-side routing
-│   │   └── index.css           # Cybersecurity design tokens & layout styles
-│   └── package.json
+│   ├── src/                    # Components, layouts, hooks, API service, styles
+│   └── dist/                   # Production compiled assets (served via Express in prod)
 ├── server/                     # Backend API Application (Node.js + Express)
 │   ├── src/
-│   │   ├── config/             # Centralized environment validation (env.js)
+│   │   ├── config/             # Environment validation & Azure settings (env.js)
 │   │   ├── controllers/        # auth, scan, finding, incident, analytics
-│   │   ├── middleware/         # auth (JWT/Cookie + RBAC), errorHandler, requestLogger, validate
+│   │   ├── middleware/         # auth, errorHandler, requestLogger, fileUpload
 │   │   ├── routes/             # auth, scans, findings, incidents, analytics, audit-logs, health
 │   │   ├── services/
 │   │   │   ├── scanner/        # scannerEngine, scannerService, maskingService, parsers, rules
+│   │   │   ├── storage/        # blobStorageService (Azure Blob Storage + fallback)
+│   │   │   ├── cloud/          # keyVaultService (Azure Key Vault + caching)
 │   │   │   └── incidents/      # incidentService (lifecycle FSM, transitions, validations)
 │   │   ├── repositories/       # Parameterized SQL DAOs with in-memory fallback
-│   │   │   ├── incidentRepository.js # Dual-mode incident persistence & transaction handling
-│   │   │   ├── findingRepository.js
-│   │   │   ├── scanRepository.js
-│   │   │   ├── userRepository.js
-│   │   │   └── memoryStore.js  # Offline persistent store for tests/offline development
-│   │   ├── database/           # Connection pool manager (connection.js)
-│   │   └── app.js              # Application factory with cookie & CORS middleware
-│   └── package.json
+│   │   └── database/           # Connection pool manager with transient retry (connection.js)
 ├── database/                   # Relational Database Assets (SQL Server / Azure SQL)
 │   ├── schema.sql              # 9 normalized 3NF tables, constraints, indexes
 │   ├── views.sql               # vw_exposure_analytics view without count duplication
 │   ├── procedures.sql          # sp_resolve_incident atomic transaction procedure
-│   ├── queries.sql             # Parameterized queries for scans, findings, incidents, and audit
-│   └── migrations/
-│       ├── 001_initial_schema.sql
-│       ├── 002_phase2_roles_and_rules.sql
-│       └── 003_phase3_incident_remediation.sql # Phase 3 incident columns & constraints
-├── docs/                       # Architecture & Technical Documentation
-│   ├── initial-audit.md        # Initial state discovery and risk analysis
-│   ├── architecture.md         # High-level architecture and workflow flowcharts
-│   ├── scanner-design.md       # Scanner engine, parser, rule, and masking specs
-│   ├── incident-lifecycle.md   # State transitions, FSM, permissions, and verification rules
-│   ├── incident-response-design.md # Incident domain model, sp_resolve_incident, and concurrency
-│   ├── master-prompt-2-implementation.md # Phase 2 implementation audit and report
-│   ├── master-prompt-3-implementation.md # Phase 3 implementation audit and report
-│   └── data-dictionary.md      # Column specs, functional dependencies & 3NF proof
-├── scripts/
-│   └── seed.js                 # Controlled development seed script (hashes passwords)
-├── tests/                      # Automated Test Suite (67 tests across 12 suites)
-│   ├── incident.workflow.test.js # Creation, assignment, transitions, remediation, verification, resolution
-│   ├── auth.rbac.test.js       # Auth tokens, login, logout, and role matrix tests
-│   ├── scanner.detection.test.js # Regex parsing, rules, severities, and masking tests
-│   ├── scanner.upload.test.js  # Format validation, size limit, binary detection tests
-│   ├── scan.persistence.test.js# Scan execution, persistence, and audit log tests
-│   ├── api.health.test.js      # Health endpoint response & DB connectivity
-│   ├── api.routing.test.js     # 404 handler and route verification
-│   ├── config.validation.test.js # Fail-fast configuration testing
-│   ├── database.schema.test.js # SQL 9-table schema & constraint verification
-│   ├── error.handling.test.js  # Centralized error formatting
-│   ├── frontend.rendering.test.js # Client UI rendering, pages, and route tests
-│   └── security.secrets.test.js# Automated secret leak scanning across repo
-└── README.md                   # This project guide
+│   └── migrations/             # Idempotent forward migrations (001, 002, 003)
+├── infra/                      # Infrastructure as Code & Deployment Automation
+│   └── azure/
+│       ├── main.bicep          # Bicep template (App Service, SQL, Storage, Key Vault, RBAC)
+│       ├── parameters.json     # Parameter template (zero hardcoded secrets)
+│       ├── deploy.ps1          # Automated deployment script for PowerShell
+│       └── deploy.sh           # Automated deployment script for Bash
+├── .github/workflows/          # CI/CD Pipelines
+│   ├── ci.yml                  # Automated build, lint (Oxlint), and tests (Vitest)
+│   └── deploy.yml              # Automated Azure App Service deployment via OIDC
+├── docs/                       # Architecture & Security Documentation
+│   ├── architecture.md         # System architecture & cloud topology
+│   ├── azure-deployment.md     # Step-by-step Azure deployment manual
+│   ├── azure-network-security.md # Cloud network paths, firewalls, and low-cost options
+│   ├── cloud-security-checklist.md # Verified security controls checklist
+│   └── master-prompt-4-cloud-implementation.md # Phase 4 implementation audit
+└── tests/                      # Automated Vitest & Supertest Test Suites (84 tests)
+    ├── cloud.integration.test.js # Phase 4 cloud probes, storage, Key Vault, and headers
+    ├── incident.workflow.test.js # Phase 3 incident response lifecycle & verification
+    ├── auth.rbac.test.js       # Authentication & role-based access control
+    └── ...                     # Schema, upload, detection, health, and routing tests
 ```
 
 ---
 
-## 5. Development Setup & Execution
+## 5. Local Development Quickstart
 
-### 1. Clone & Install Dependencies
 ```bash
+# 1. Clone repository
 git clone https://github.com/Amankumarx1/Leaklens.git
 cd Leaklens
-npm install
-```
 
-### 2. Configure Environment Variables
-Copy `.env.example` to `.env`:
-```bash
+# 2. Install dependencies
+npm run install:all
+
+# 3. Configure environment
 cp .env.example .env
-# Windows PowerShell: Copy-Item .env.example .env
+# Edit .env with your local settings
+
+# 4. Run automated test suites (84 tests across 13 suites)
+npm test
+
+# 5. Start development servers (frontend on :5173, backend on :3000)
+npm run dev
 ```
 
-### 3. Initialize Database Schema & Seed Accounts
-If connecting to Microsoft SQL Server / Azure SQL:
-```bash
-sqlcmd -S localhost -d leaklens_db -i database/schema.sql
-sqlcmd -S localhost -d leaklens_db -i database/migrations/002_phase2_roles_and_rules.sql
-sqlcmd -S localhost -d leaklens_db -i database/migrations/003_phase3_incident_remediation.sql
-```
-
-Provision default development accounts:
-```bash
-node scripts/seed.js
-```
-
-#### Pre-provisioned Development Accounts:
-| Role | Email | Password | Permissions |
-|---|---|---|:---:|
-| **Analyst** | `analyst@leaklens.local` | `LeakLensDev2026!` | Can scan, create & triage incidents, resolve |
-| **Admin** | `admin@leaklens.local` | `LeakLensDev2026!` | Full administrative capabilities |
-| **Compliance Reviewer** | `compliance@leaklens.local` | `LeakLensDev2026!` | Read-only inspection & audit view |
+Default local test credentials:
+- **Admin:** `admin@leaklens.local` / `Admin@LeakLens2026!`
+- **Analyst:** `analyst@leaklens.local` / `Analyst@LeakLens2026!`
+- **Compliance:** `reviewer@leaklens.local` / `Reviewer@LeakLens2026!`
 
 ---
 
-## 6. Running the Application
+## 6. Cloud Deployment Instructions
 
-### Start Backend Server:
-```bash
-npm run dev:server
-# Server runs on http://localhost:3000
-# Health check: http://localhost:3000/api/health
+See [docs/azure-deployment.md](docs/azure-deployment.md) for the complete cloud deployment guide.
+
+To execute automated deployment using Azure CLI:
+```powershell
+# Windows PowerShell
+.\infra\azure\deploy.ps1 -ResourceGroupName "rg-leaklens-prod" -Location "eastus"
 ```
-
-### Start Frontend Client (Separate Terminal):
 ```bash
-npm run dev:client
-# Frontend runs on http://localhost:5173
+# Linux / macOS Bash
+./infra/azure/deploy.sh "rg-leaklens-prod" "eastus"
 ```
 
 ---
 
-## 7. Step-by-Step Procedure: Demonstrating One Complete Incident Workflow
+## 7. Operational Health Probes
 
-1. **Sign In as Analyst:** Open `http://localhost:5173/login`, click **Quick Fill: Analyst**, and click **Sign In**.
-2. **Scan a File:** Navigate to **+ Scan File** (`/scans/new`), upload a sample file containing credentials (e.g. `billing.json` containing `ghp_SampleToken1234567890`), and run the scan.
-3. **Escalate to Incident:**
-   - Go to **Findings** (`/findings`), locate the newly detected finding, and click **Escalate** (or inspect finding and click **Escalate to Incident**).
-   - On the **Create Security Incident** page, enter a title (e.g., `GitHub Token Compromise in Billing API`), select Priority (`CRITICAL`), enter a safe description, verify the finding checkbox is selected, and click **Create Incident & Associate Findings**.
-4. **Assign the Incident:**
-   - In the Incident Workspace (`/incidents/:id`), locate the **Current Assignee** selector in the overview card.
-   - Select `Lead Security Analyst (ANALYST)` and click **Save**.
-   - Observe the assignment recorded in the activity timeline.
-5. **Start Investigation:**
-   - Click the **Start Investigation** button. Status transitions to `IN_PROGRESS`.
-   - In the **Record Remediation Action** form, select `Remediation / Key Rotation`, enter notes (e.g. `Revoked token ghp_... in GitHub developer settings; rotated repository secrets`), and click **Log Remediation Action**.
-6. **Request Verification:**
-   - Click the **Request Verification** button. Status transitions to `PENDING_VERIFICATION`.
-7. **Perform Verification Check:**
-   - Click **Record Verification Check**. Select Outcome `PASSED`, enter verification summary (e.g. `Queried GitHub API using old token; confirmed HTTP 401 Unauthorized`), and submit.
-8. **Execute Transactional Resolution (`sp_resolve_incident`):**
-   - Click **Resolve Incident** (or **Confirm Resolution**).
-   - Enter a comprehensive resolution summary (e.g. `Token revoked and rotated. Git history rewritten via git-filter-repo. Verified zero subsequent unauthorized calls`).
-   - Click **Commit Atomic Resolution**.
-   - Observe that the incident status immediately transitions to `RESOLVED`, all linked findings are marked `remediated`, and the resolution event is recorded in the immutable activity timeline.
-9. **Verify RBAC Restrictions:** Sign out, log in as `compliance@leaklens.local`, and navigate to `/incidents`. Note that compliance reviewers can inspect tickets and audit trails in read-only mode, with all mutation controls securely disabled.
+- **Liveness Probe:** `GET /api/health` — Verifies Express process event loop, memory, and uptime.
+- **Readiness Probe:** `GET /api/health/ready` — Validates Azure SQL Database, Azure Blob Storage, and Azure Key Vault connectivity without exposing credentials. Returns HTTP 200 when ready, HTTP 503 when dependencies are unreachable.
 
 ---
 
-## 8. Testing & Static Analysis
+## 8. Verification & Test Summary
 
-Execute all 67 automated tests:
+Run the comprehensive test suite locally:
 ```bash
 npm test
 ```
-
-Execute frontend linting (Oxlint):
-```bash
-npm run lint:client
-```
-
-Verify frontend production build:
-```bash
-npm run build:client
-```
-
----
-
-## 9. Security Considerations
-
-1. **In-Memory Masking:** Redaction occurs directly within `maskingService.js` in memory before database record creation.
-2. **Strict Parameterization:** All SQL database queries use parameterized parameters via the `mssql` client.
-3. **Atomic State Progression:** Resolution updates incident status, marks findings remediated, and logs audit events within a single atomic SQL transaction.
-4. **Optimistic Concurrency:** Version tokens prevent lost updates from concurrent analyst operations.
-5. **Private Key Body Protection:** PEM private key bodies are immediately dropped from memory and never returned in API responses or logs.
+All 13 test suites and 84 tests pass cleanly, covering:
+- Database schema validation and constraints.
+- Multi-format file upload validation (`.txt`, `.json`, `.csv`).
+- Sensitive pattern detection engine and in-memory redaction.
+- Private Azure Blob Storage provider, safe paths, and compensating failure cleanup.
+- Azure Key Vault client caching and development fallback.
+- Health and readiness probes with sensitive-data redaction.
+- Strict Finite-State Machine incident management lifecycle.
+- Role-based access control (`ADMIN`, `ANALYST`, `COMPLIANCE_REVIEWER`).
+- Security headers (CSP, HSTS, X-Frame-Options) and reverse proxy trust.
 
 ---
 
-## 10. Credits & Acknowledgements
+## 9. Attributions & Credits
 
-- **Design & Architecture:** Developed as part of the LeakLens Authorized Data Exposure Detection & Response platform.
-- **Engineering Assistance:** Paired full-stack implementation with Antigravity (Google DeepMind).
+- **Core Technologies:** Node.js, Express, React, Vite, Microsoft SQL Server / Azure SQL, `@azure/storage-blob`, `@azure/identity`, `@azure/keyvault-secrets`.
+- **Testing & Tooling:** Vitest, Supertest, Oxlint.
+- **Security Guidance:** Microsoft Azure Well-Architected Framework, OWASP Top 10 API Security Risks, NIST SP 800-61 Rev. 2.

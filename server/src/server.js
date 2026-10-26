@@ -1,19 +1,23 @@
 import createApp from './app.js';
 import env from './config/env.js';
 import { checkDatabaseHealth, closePool } from './database/connection.js';
+import { checkStorageHealth } from './services/storage/blobStorageService.js';
+import { checkKeyVaultHealth } from './services/cloud/keyVaultService.js';
 
 const app = createApp();
+const HOST = '0.0.0.0';
 
-const server = app.listen(env.PORT, async () => {
+const server = app.listen(env.PORT, HOST, async () => {
   console.log(`=======================================================`);
   console.log(`  LeakLens Security Platform — Server Initialized`);
   console.log(`  Environment : ${env.NODE_ENV}`);
-  console.log(`  Port        : ${env.PORT}`);
-  console.log(`  Health API  : http://localhost:${env.PORT}/api/health`);
+  console.log(`  Host:Port   : ${HOST}:${env.PORT}`);
+  console.log(`  Health API  : http://${HOST}:${env.PORT}/api/health`);
+  console.log(`  Ready API   : http://${HOST}:${env.PORT}/api/health/ready`);
   console.log(`  Client URL  : ${env.CLIENT_URL}`);
   console.log(`=======================================================`);
 
-  // Initial non-blocking database connectivity check
+  // Initial non-blocking dependency connectivity checks
   try {
     const dbStatus = await checkDatabaseHealth();
     if (dbStatus.isHealthy) {
@@ -21,8 +25,14 @@ const server = app.listen(env.PORT, async () => {
     } else {
       console.warn(`[Database] Initial connectivity check: ${dbStatus.message}`);
     }
+
+    const storageStatus = await checkStorageHealth();
+    console.log(`[Storage] Initial status: ${storageStatus.message} (Container: ${storageStatus.container})`);
+
+    const kvStatus = await checkKeyVaultHealth();
+    console.log(`[KeyVault] Initial status: ${kvStatus.message}`);
   } catch (err) {
-    console.warn(`[Database] Initial connectivity check failed: ${err.message}`);
+    console.warn(`[Diagnostics] Startup checks encountered notice: ${err.message}`);
   }
 });
 

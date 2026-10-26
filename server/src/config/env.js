@@ -35,12 +35,16 @@ function validateConfig() {
       errors.push('DB_NAME is required in production.');
     }
 
-    if (!process.env.DB_USER) {
-      errors.push('DB_USER is required in production.');
-    }
+    // Support Entra Managed Identity (azure-active-directory-default) as primary auth
+    const isEntraAuth = process.env.AZURE_SQL_AUTH_TYPE === 'azure-active-directory-default';
+    if (!isEntraAuth) {
+      if (!process.env.DB_USER) {
+        errors.push('DB_USER is required in production when not using Azure Entra Managed Identity.');
+      }
 
-    if (!process.env.DB_PASSWORD) {
-      errors.push('DB_PASSWORD is required in production.');
+      if (!process.env.DB_PASSWORD) {
+        errors.push('DB_PASSWORD is required in production when not using Azure Entra Managed Identity.');
+      }
     }
 
     // In production, TLS certificate trust must not be blindly disabled
@@ -75,6 +79,7 @@ export const env = {
     database: process.env.DB_NAME || 'LeakLensDB',
     user: process.env.DB_USER || 'leaklens_app',
     password: process.env.DB_PASSWORD || '',
+    authType: process.env.AZURE_SQL_AUTH_TYPE || (process.env.NODE_ENV === 'production' && !process.env.DB_PASSWORD ? 'azure-active-directory-default' : 'default'),
     options: {
       encrypt: process.env.DB_ENCRYPT === 'true' || process.env.NODE_ENV === 'production',
       trustServerCertificate: process.env.NODE_ENV === 'production'
@@ -88,6 +93,14 @@ export const env = {
       min: parseInt(process.env.DB_POOL_MIN || '1', 10),
       idleTimeoutMillis: 30000
     }
+  },
+  AZURE: {
+    STORAGE_ACCOUNT_NAME: process.env.AZURE_STORAGE_ACCOUNT_NAME || '',
+    STORAGE_CONTAINER_NAME: process.env.AZURE_STORAGE_CONTAINER_NAME || 'leaklens-scans',
+    STORAGE_CONNECTION_STRING: process.env.AZURE_STORAGE_CONNECTION_STRING || '',
+    KEYVAULT_NAME: process.env.AZURE_KEYVAULT_NAME || '',
+    KEY_VAULT_URI: process.env.KEY_VAULT_URI || '',
+    APP_INSIGHTS_CONNECTION_STRING: process.env.APPLICATIONINSIGHTS_CONNECTION_STRING || ''
   }
 };
 
