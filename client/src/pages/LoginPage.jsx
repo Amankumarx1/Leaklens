@@ -4,6 +4,7 @@ import { login } from '../services/api';
 export function LoginPage({ onLoginSuccess }) {
   const [email, setEmail] = useState('analyst@leaklens.local');
   const [password, setPassword] = useState('LeakLensDev2026!');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -99,23 +100,46 @@ export function LoginPage({ onLoginSuccess }) {
             <label style={{ display: 'block', fontSize: '12px', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '6px', letterSpacing: '0.05em' }}>
               Password
             </label>
-            <input
-              id="input-password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              style={{
-                width: '100%',
-                padding: '10px 14px',
-                backgroundColor: 'var(--bg-app)',
-                border: '1px solid var(--border-medium)',
-                borderRadius: 'var(--radius-md)',
-                color: 'var(--text-primary)',
-                fontSize: '14px',
-                outline: 'none'
-              }}
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                id="input-password"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                style={{
+                  width: '100%',
+                  padding: '10px 42px 10px 14px',
+                  backgroundColor: 'var(--bg-app)',
+                  border: '1px solid var(--border-medium)',
+                  borderRadius: 'var(--radius-md)',
+                  color: 'var(--text-primary)',
+                  fontSize: '14px',
+                  outline: 'none'
+                }}
+              />
+              <button
+                type="button"
+                id="btn-toggle-password"
+                onClick={() => setShowPassword(!showPassword)}
+                title={showPassword ? 'Hide password' : 'Show password'}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                style={{
+                  position: 'absolute',
+                  right: '10px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  padding: '4px'
+                }}
+              >
+                {showPassword ? '👁️' : '🔒'}
+              </button>
+            </div>
           </div>
 
           <button

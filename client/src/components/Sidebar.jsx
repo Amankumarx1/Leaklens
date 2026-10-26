@@ -4,6 +4,7 @@ const NAV_ITEMS = [
   {
     id: 'dashboard',
     label: 'Dashboard',
+    matchRoutes: ['dashboard'],
     icon: (
       <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
         <rect x="3" y="3" width="7" height="7" rx="1" />
@@ -16,6 +17,7 @@ const NAV_ITEMS = [
   {
     id: 'scans',
     label: 'Scans',
+    matchRoutes: ['scans', 'scan-detail'],
     icon: (
       <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
         <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
@@ -25,6 +27,7 @@ const NAV_ITEMS = [
   {
     id: 'scans-new',
     label: '+ Scan File',
+    matchRoutes: ['scans-new'],
     restrictedRoles: ['COMPLIANCE_REVIEWER'],
     icon: (
       <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -35,6 +38,7 @@ const NAV_ITEMS = [
   {
     id: 'findings',
     label: 'Findings',
+    matchRoutes: ['findings'],
     icon: (
       <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
         <circle cx="12" cy="12" r="10" />
@@ -46,6 +50,7 @@ const NAV_ITEMS = [
   {
     id: 'incidents',
     label: 'Incidents',
+    matchRoutes: ['incidents', 'incident-detail', 'incidents-new'],
     icon: (
       <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
         <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
@@ -57,6 +62,7 @@ const NAV_ITEMS = [
   {
     id: 'audit-logs',
     label: 'Audit Logs',
+    matchRoutes: ['audit-logs'],
     icon: (
       <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -70,6 +76,7 @@ const NAV_ITEMS = [
   {
     id: 'settings',
     label: 'Settings',
+    matchRoutes: ['settings'],
     icon: (
       <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
         <circle cx="12" cy="12" r="3" />
@@ -84,26 +91,47 @@ export function Sidebar({ activeRoute, onNavigate, user }) {
 
   return (
     <aside className="app-sidebar">
-      <div className="sidebar-brand">
+      {/* Clickable Brand Logo navigating to Dashboard without reload */}
+      <button
+        id="btn-sidebar-brand"
+        className="sidebar-brand"
+        onClick={() => onNavigate('dashboard')}
+        style={{
+          background: 'transparent',
+          border: 'none',
+          padding: '24px 20px',
+          width: '100%',
+          cursor: 'pointer',
+          textAlign: 'left'
+        }}
+        title="Return to Security Dashboard"
+        aria-label="LeakLens Defensive Security Dashboard"
+      >
         <div className="brand-icon">L</div>
         <div className="brand-text">
           <h1>LeakLens</h1>
           <p>Defensive Security</p>
         </div>
-      </div>
+      </button>
 
-      <nav className="sidebar-menu">
+      <nav className="sidebar-menu" aria-label="Main Navigation">
         {NAV_ITEMS.map(item => {
           if (item.restrictedRoles && item.restrictedRoles.includes(user?.role)) {
             return null; // Hide restricted action button from navigation
           }
 
+          const isActive = item.matchRoutes 
+            ? item.matchRoutes.includes(activeRoute) 
+            : activeRoute === item.id;
+
           return (
             <button
               key={item.id}
               id={`nav-link-${item.id}`}
-              className={`nav-item ${activeRoute === item.id ? 'active' : ''}`}
+              className={`nav-item ${isActive ? 'active' : ''}`}
               onClick={() => onNavigate(item.id)}
+              aria-current={isActive ? 'page' : undefined}
+              title={`Navigate to ${item.label}`}
             >
               {item.icon}
               <span>{item.label}</span>

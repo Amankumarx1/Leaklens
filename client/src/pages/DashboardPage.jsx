@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getDashboardAnalytics, getIncidentMetrics } from '../services/api';
+import { getDashboardAnalytics, getIncidentMetrics, getScans, getIncidents } from '../services/api';
 import EmptyState from '../components/EmptyState';
 import LoadingState from '../components/LoadingState';
 import ErrorState from '../components/ErrorState';
@@ -8,15 +8,20 @@ import StatusBadge from '../components/StatusBadge';
 export function DashboardPage({ health, user, onNavigate }) {
   const [metrics, setMetrics] = useState(null);
   const [incidentMetrics, setIncidentMetrics] = useState(null);
+  const [recentScans, setRecentScans] = useState([]);
+  const [recentIncidents, setRecentIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const fetchMetrics = useCallback(async () => {
     try {
+      setLoading(true);
       setError(null);
-      const [dashRes, incRes] = await Promise.all([
+      const [dashRes, incRes, scansRes, incidentsRes] = await Promise.all([
         getDashboardAnalytics(),
-        getIncidentMetrics().catch(() => null)
+        getIncidentMetrics().catch(() => null),
+        getScans({ limit: 5 }).catch(() => null),
+        getIncidents({ limit: 5 }).catch(() => null)
       ]);
 
       if (dashRes?.success) {
@@ -24,6 +29,12 @@ export function DashboardPage({ health, user, onNavigate }) {
       }
       if (incRes?.success && incRes?.data?.metrics) {
         setIncidentMetrics(incRes.data.metrics);
+      }
+      if (scansRes?.success && scansRes?.data) {
+        setRecentScans(scansRes.data.slice(0, 5));
+      }
+      if (incidentsRes?.success && incidentsRes?.data?.incidents) {
+        setRecentIncidents(incidentsRes.data.incidents.slice(0, 5));
       }
     } catch (err) {
       setError(err.message || 'Failed to load telemetry.');
@@ -34,20 +45,20 @@ export function DashboardPage({ health, user, onNavigate }) {
 
   useEffect(() => {
     let ignore = false;
-
     async function load() {
       try {
-        setError(null);
-        const [dashRes, incRes] = await Promise.all([
+        const [dashRes, incRes, scansRes, incidentsRes] = await Promise.all([
           getDashboardAnalytics(),
-          getIncidentMetrics().catch(() => null)
+          getIncidentMetrics().catch(() => null),
+          getScans({ limit: 5 }).catch(() => null),
+          getIncidents({ limit: 5 }).catch(() => null)
         ]);
 
-        if (!ignore && dashRes?.success) {
-          setMetrics(dashRes.data);
-        }
-        if (!ignore && incRes?.success && incRes?.data?.metrics) {
-          setIncidentMetrics(incRes.data.metrics);
+        if (!ignore) {
+          if (dashRes?.success) setMetrics(dashRes.data);
+          if (incRes?.success && incRes?.data?.metrics) setIncidentMetrics(incRes.data.metrics);
+          if (scansRes?.success && scansRes?.data) setRecentScans(scansRes.data.slice(0, 5));
+          if (incidentsRes?.success && incidentsRes?.data?.incidents) setRecentIncidents(incidentsRes.data.incidents.slice(0, 5));
         }
       } catch (err) {
         if (!ignore) setError(err.message || 'Failed to load telemetry.');
@@ -55,13 +66,12 @@ export function DashboardPage({ health, user, onNavigate }) {
         if (!ignore) setLoading(false);
       }
     }
-
     load();
     return () => { ignore = true; };
   }, []);
 
   if (loading && !metrics) {
-    return <LoadingState message="Loading security posture metrics..." />;
+    return <LoadingState message="Loading security posture metrics & telemetry..." />;
   }
 
   if (error && !metrics) {
@@ -76,35 +86,126 @@ export function DashboardPage({ health, user, onNavigate }) {
   const canScan = user?.role !== 'COMPLIANCE_REVIEWER';
 
   return (
-    <div>
-      {/* Metric Cards Row */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* Top Action Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+        <div>
+          <h2 style={{ fontSize: '18px', fontWeight: '600', color: 'var(--text-primary)', margin: 0 }}>
+            Operational Security Posture
+          </h2>
+          <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+            Real-time credential exposure detection, response telemetry, and system controls.
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button 
+            id="btn-refresh-dashboard" 
+            className="btn btn-secondary" 
+            onClick={fetchMetrics} 
+            disabled={loading}
+            title="Reload metrics from database"
+          >
+            {loading ? 'Refreshing...' : 'Refresh Telemetry'}
+          </button>
+          
+          <button 
+            id="btn-nav-analytics" 
+            className="btn btn-secondary" 
+            onClick={() => onNavigate('analytics')}
+            title="Open Power BI DirectQuery metrics"
+          >
+            📊 Analytics & BI
+          </button>
+
+          {canScan && (
+            <button 
+              id="btn-dashboard-new-scan" 
+              className="btn btn-primary" 
+              onClick={() => onNavigate('scans-new')}
+            >
+              + Scan File
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Interactive Metric Cards Row */}
       <div className="metrics-grid">
-        <div className="metric-card">
-          <div className="metric-card-title">Completed Scans</div>
+        <div 
+          className="metric-card hover-card" 
+          role="button"
+          tabIndex={0}
+          onClick={() => onNavigate('scans')}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onNavigate('scans'); }}
+          style={{ cursor: 'pointer', transition: 'border-color 0.2s, transform 0.15s' }}
+          title="Click to view all scans"
+          id="card-metric-scans"
+        >
+          <div className="metric-card-title" style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Completed Scans</span>
+            <span style={{ fontSize: '11px', color: 'var(--accent-cyan)' }}>View →</span>
+          </div>
           <div className="metric-card-value">{totalScans}</div>
           <div className="metric-card-meta">{totalScans === 0 ? 'Awaiting first scan job' : 'Processed file batches'}</div>
         </div>
 
-        <div className="metric-card">
-          <div className="metric-card-title">Exposures Detected</div>
+        <div 
+          className="metric-card hover-card" 
+          role="button"
+          tabIndex={0}
+          onClick={() => onNavigate('findings')}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onNavigate('findings'); }}
+          style={{ cursor: 'pointer', transition: 'border-color 0.2s, transform 0.15s' }}
+          title="Click to inspect all exposure findings"
+          id="card-metric-findings"
+        >
+          <div className="metric-card-title" style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Exposures Detected</span>
+            <span style={{ fontSize: '11px', color: 'var(--accent-cyan)' }}>View →</span>
+          </div>
           <div className="metric-card-value" style={{ color: totalFindings > 0 ? 'var(--status-danger)' : 'var(--text-primary)' }}>
             {totalFindings}
           </div>
           <div className="metric-card-meta">{totalFindings === 0 ? 'No findings recorded' : 'Redacted findings stored'}</div>
         </div>
 
-        <div className="metric-card">
-          <div className="metric-card-title">Active Incidents</div>
-          <div className="metric-card-value" style={{ color: (incidentMetrics?.openIncidents + incidentMetrics?.inProgressIncidents) > 0 ? 'var(--status-warning)' : 'var(--accent-cyan)' }}>
+        <div 
+          className="metric-card hover-card" 
+          role="button"
+          tabIndex={0}
+          onClick={() => onNavigate('incidents')}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onNavigate('incidents'); }}
+          style={{ cursor: 'pointer', transition: 'border-color 0.2s, transform 0.15s' }}
+          title="Click to manage security incidents"
+          id="card-metric-incidents"
+        >
+          <div className="metric-card-title" style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Active Incidents</span>
+            <span style={{ fontSize: '11px', color: 'var(--accent-cyan)' }}>View →</span>
+          </div>
+          <div className="metric-card-value" style={{ color: ((incidentMetrics?.openIncidents || 0) + (incidentMetrics?.inProgressIncidents || 0)) > 0 ? 'var(--status-warning)' : 'var(--accent-cyan)' }}>
             {(incidentMetrics?.openIncidents || 0) + (incidentMetrics?.inProgressIncidents || 0)}
           </div>
           <div className="metric-card-meta">
-            {incidentMetrics ? `Pending Verif: ${incidentMetrics.pendingVerificationIncidents || 0} | Resolved: ${incidentMetrics.resolvedIncidents || 0}` : 'Incident triage active'}
+            {incidentMetrics ? `Pending: ${incidentMetrics.pendingVerificationIncidents || 0} | Resolved: ${incidentMetrics.resolvedIncidents || 0}` : 'Incident triage active'}
           </div>
         </div>
 
-        <div className="metric-card">
-          <div className="metric-card-title">Critical & High Severity</div>
+        <div 
+          className="metric-card hover-card" 
+          role="button"
+          tabIndex={0}
+          onClick={() => onNavigate('findings')}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onNavigate('findings'); }}
+          style={{ cursor: 'pointer', transition: 'border-color 0.2s, transform 0.15s' }}
+          title="Click to view high-severity exposures"
+          id="card-metric-critical"
+        >
+          <div className="metric-card-title" style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Critical & High Severity</span>
+            <span style={{ fontSize: '11px', color: 'var(--accent-cyan)' }}>View →</span>
+          </div>
           <div className="metric-card-value" style={{ color: (criticalCount + highCount) > 0 ? 'var(--status-danger)' : 'var(--text-primary)' }}>
             {criticalCount + highCount}
           </div>
@@ -112,7 +213,7 @@ export function DashboardPage({ health, user, onNavigate }) {
         </div>
       </div>
 
-      {/* Main Panel */}
+      {/* Main Content Panels */}
       {totalScans === 0 ? (
         <div className="panel">
           <div className="panel-header">
@@ -130,30 +231,17 @@ export function DashboardPage({ health, user, onNavigate }) {
           />
         </div>
       ) : (
-        <div className="panel">
-          <div className="panel-header">
-            <h3>Exposure Severity & Category Breakdown</h3>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button className="btn btn-secondary" onClick={() => onNavigate('incidents')}>
-                View Incidents ({incidentMetrics?.totalIncidents || 0})
-              </button>
-              <button className="btn btn-secondary" onClick={() => onNavigate('findings')}>
-                Inspect Findings ({totalFindings})
-              </button>
-              {canScan && (
-                <button className="btn btn-primary" onClick={() => onNavigate('scans-new')}>
-                  + Scan File
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
+        <>
+          {/* Breakdown Panels */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
             {/* Severity Breakdown */}
-            <div style={{ background: 'var(--bg-app)', padding: '20px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
-              <h4 style={{ fontSize: '13px', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '14px' }}>
-                Severity Distribution
-              </h4>
+            <div className="panel">
+              <div className="panel-header">
+                <h3>Severity Distribution</h3>
+                <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '4px 8px' }} onClick={() => onNavigate('findings')}>
+                  View All
+                </button>
+              </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {Object.entries(metrics?.findingsBySeverity || {}).map(([sev, count]) => (
                   <div key={sev} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
@@ -167,10 +255,13 @@ export function DashboardPage({ health, user, onNavigate }) {
             </div>
 
             {/* Category Breakdown */}
-            <div style={{ background: 'var(--bg-app)', padding: '20px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
-              <h4 style={{ fontSize: '13px', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '14px' }}>
-                Detected Categories
-              </h4>
+            <div className="panel">
+              <div className="panel-header">
+                <h3>Detected Categories</h3>
+                <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '4px 8px' }} onClick={() => onNavigate('findings')}>
+                  Filter
+                </button>
+              </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {Object.entries(metrics?.findingsByCategory || {}).map(([cat, count]) => (
                   <div key={cat} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
@@ -181,7 +272,101 @@ export function DashboardPage({ health, user, onNavigate }) {
               </div>
             </div>
           </div>
-        </div>
+
+          {/* Recent Scans & Recent Incidents Double Column */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
+            {/* Recent Scans */}
+            <div className="panel">
+              <div className="panel-header">
+                <h3>Recent Scan Executions</h3>
+                <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '4px 8px' }} onClick={() => onNavigate('scans')}>
+                  View Scans ({totalScans})
+                </button>
+              </div>
+              {recentScans.length === 0 ? (
+                <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>No recent scans.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {recentScans.map(scan => (
+                    <div 
+                      key={scan.scan_id}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '10px 12px',
+                        backgroundColor: 'var(--bg-app)',
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: '13px'
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: '500' }}>{scan.original_filename || 'diagnostic.txt'}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                          {new Date(scan.created_at).toLocaleString()} • {scan.total_findings || 0} findings
+                        </div>
+                      </div>
+                      <button
+                        className="btn btn-secondary"
+                        style={{ fontSize: '11px', padding: '4px 8px' }}
+                        onClick={() => onNavigate('scan-detail', scan.scan_id)}
+                      >
+                        Inspect →
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Recent Incidents */}
+            <div className="panel">
+              <div className="panel-header">
+                <h3>Active Incident Response Desk</h3>
+                <button className="btn btn-secondary" style={{ fontSize: '11px', padding: '4px 8px' }} onClick={() => onNavigate('incidents')}>
+                  View Incidents ({incidentMetrics?.totalIncidents || 0})
+                </button>
+              </div>
+              {recentIncidents.length === 0 ? (
+                <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>No active incidents created yet.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {recentIncidents.map(inc => (
+                    <div 
+                      key={inc.incident_id}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '10px 12px',
+                        backgroundColor: 'var(--bg-app)',
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: '13px'
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: '500' }}>{inc.title}</div>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '2px' }}>
+                          <StatusBadge type={inc.status === 'RESOLVED' ? 'healthy' : 'warning'}>
+                            {inc.status}
+                          </StatusBadge>
+                          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{inc.priority}</span>
+                        </div>
+                      </div>
+                      <button
+                        className="btn btn-secondary"
+                        style={{ fontSize: '11px', padding: '4px 8px' }}
+                        onClick={() => onNavigate('incident-detail', inc.incident_id)}
+                      >
+                        Workspace →
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
       )}
 
       {/* Security Architecture & Governance Panel */}

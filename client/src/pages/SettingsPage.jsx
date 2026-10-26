@@ -1,137 +1,505 @@
-import React from 'react';
+import React, { useState } from 'react';
 import StatusBadge from '../components/StatusBadge';
+import { getHealthStatus } from '../services/api';
 
-export function SettingsPage({ health }) {
-  const isDbConnected = health?.components?.database?.status === 'connected';
+const DEFAULT_PREFERENCES = {
+  maxUploadThresholdMb: 5,
+  maskingStyle: 'standard', // 'standard' | 'full'
+  autoRefreshIntervalSec: 0 // 0 = off, 30, 60
+};
+
+export function SettingsPage({ health, user, onNavigate }) {
+  const [activeTab, setActiveTab] = useState('profile'); // 'profile' | 'rules' | 'diagnostics'
+  
+  // Profile & Preferences state
+  const [displayName, setDisplayName] = useState(user?.display_name || user?.email || '');
+  const [preferences, setPreferences] = useState(() => {
+    try {
+      const saved = localStorage.getItem('leaklens_preferences');
+      return saved ? { ...DEFAULT_PREFERENCES, ...JSON.parse(saved) } : DEFAULT_PREFERENCES;
+    } catch {
+      return DEFAULT_PREFERENCES;
+    }
+  });
+
+  const [saveStatus, setSaveStatus] = useState(null); // { type: 'success' | 'error', message: string }
+
+  // Pattern Simulator state
+  const [simulatorInput, setSimulatorInput] = useState('API_KEY=key_test_abcdef123456789\nGITHUB_PAT=ghp_demoSecretToken0987654321FedCba\nINTERNAL_ID=LL-ID-A1B2-C3D4\nCONTACT_EMAIL=secops@leaklens.local');
+  const [simulatorResults, setSimulatorResults] = useState(null);
+
+  // Live Diagnostics state
+  const [diagnosticsHealth, setDiagnosticsHealth] = useState(health || null);
+  const [pinging, setPinging] = useState(false);
+  const [pingLatency, setPingLatency] = useState(null);
 
   const detectionRules = [
-    { name: 'AWS Access Key ID', category: 'API_KEY', pattern: 'AKIA[0-9A-Z]{16}', severity: 'critical', status: 'Enabled' },
-    { name: 'GitHub Personal Access Token', category: 'TOKEN', pattern: 'ghp_[A-Za-z0-9_]{36,255}', severity: 'critical', status: 'Enabled' },
-    { name: 'Generic API Key / Secret', category: 'SECRET_KEY', pattern: '(?:api_key|secret)\\s*=\\s*["\'][A-Za-z0-9_-]{16,}["\']', severity: 'high', status: 'Enabled' },
-    { name: 'Database Connection String', category: 'DATABASE_CREDENTIAL', pattern: 'Server=tcp:[^;]+;Database=[^;]+;User ID=[^;]+;Password=[^;]+;', severity: 'critical', status: 'Enabled' }
+    { id: 'RULE-EMAIL', name: 'RFC Email Address Pattern', category: 'EMAIL_ADDRESS', regex: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, severity: 'low', status: 'Enabled' },
+    { id: 'RULE-API', name: 'Candidate API Key / Secret Token', category: 'API_KEY_CANDIDATE', regex: /\b(?:key_live_|key_test_|sk_live_|sk_test_|sk_demo_|api_key_|ghp_|gho_)[0-9a-zA-Z]{12,64}\b/g, severity: 'high', status: 'Enabled' },
+    { id: 'RULE-PEM', name: 'Cryptographic Private Key Marker', category: 'PRIVATE_KEY_MARKER', regex: /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/g, severity: 'critical', status: 'Enabled' },
+    { id: 'RULE-ID', name: 'Sensitive Enterprise Identifier', category: 'SENSITIVE_IDENTIFIER', regex: /\bLL-ID-[A-Z0-9]{4}-[A-Z0-9]{4}\b/g, severity: 'medium', status: 'Enabled' }
   ];
 
+  const handleSavePreferences = (e) => {
+    e.preventDefault();
+    try {
+      if (!displayName.trim()) {
+        setSaveStatus({ type: 'error', message: 'Operator display name cannot be blank.' });
+        return;
+      }
+
+      localStorage.setItem('leaklens_preferences', JSON.stringify(preferences));
+      localStorage.setItem('leaklens_display_name', displayName.trim());
+
+      setSaveStatus({ type: 'success', message: 'Operator preferences saved and persisted locally.' });
+      setTimeout(() => setSaveStatus(null), 3500);
+    } catch {
+      setSaveStatus({ type: 'error', message: 'Failed to write preferences to local storage.' });
+    }
+  };
+
+  const handleResetPreferences = () => {
+    setPreferences(DEFAULT_PREFERENCES);
+    setDisplayName(user?.display_name || user?.email || '');
+    localStorage.removeItem('leaklens_preferences');
+    localStorage.removeItem('leaklens_display_name');
+    setSaveStatus({ type: 'success', message: 'Preferences reset to application defaults.' });
+    setTimeout(() => setSaveStatus(null), 3000);
+  };
+
+  const handleRunSimulator = () => {
+    if (!simulatorInput.trim()) {
+      setSimulatorResults([]);
+      return;
+    }
+
+    const matches = [];
+    for (const rule of detectionRules) {
+      const rx = new RegExp(rule.regex.source, rule.regex.flags);
+      let match;
+      while ((match = rx.exec(simulatorInput)) !== null) {
+        const raw = match[0];
+        let masked = raw;
+        if (preferences.maskingStyle === 'full') {
+          masked = '[CONFIDENTIAL_REDACTED]';
+        } else if (raw.length > 8) {
+          const prefix = raw.slice(0, 4);
+          const suffix = raw.slice(-3);
+          masked = `${prefix}***${suffix}`;
+        } else {
+          masked = '***';
+        }
+
+        matches.push({
+          ruleName: rule.name,
+          category: rule.category,
+          severity: rule.severity,
+          matchedSnippet: raw,
+          maskedExcerpt: masked,
+          index: match.index
+        });
+      }
+    }
+
+    setSimulatorResults(matches);
+  };
+
+  const handlePingDiagnostics = async () => {
+    try {
+      setPinging(true);
+      const start = performance.now();
+      const res = await getHealthStatus();
+      const end = performance.now();
+      setPingLatency(Math.round(end - start));
+      if (res?.data) {
+        setDiagnosticsHealth(res.data);
+      }
+    } catch {
+      setPingLatency(null);
+    } finally {
+      setPinging(false);
+    }
+  };
+
+  const isDbConnected = (diagnosticsHealth || health)?.components?.database?.status === 'connected';
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {/* Header */}
-      <div>
-        <h2 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
-          Platform Settings & Security Posture
-        </h2>
-        <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-          Environment configuration, cloud dependency readiness, and detection engine signatures.
-        </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+        <div>
+          <h2 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+            Platform Settings & Security Posture
+          </h2>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+            Operator preferences, live detection rule simulator, and runtime cloud architecture.
+          </p>
+        </div>
+        {onNavigate && (
+          <button className="btn btn-secondary" onClick={() => onNavigate('dashboard')} style={{ fontSize: '12px' }}>
+            ← Back to Dashboard
+          </button>
+        )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
-        {/* Runtime Diagnostics */}
-        <div className="panel">
-          <div className="panel-header">
-            <h3>Runtime Environment</h3>
-            <StatusBadge type="healthy">{health?.environment || 'production'}</StatusBadge>
-          </div>
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
+        <button
+          id="tab-settings-profile"
+          className={`btn ${activeTab === 'profile' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setActiveTab('profile')}
+        >
+          Operator Profile & Preferences
+        </button>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '13px', marginTop: '12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>API Gateway:</span>
-              <span style={{ fontFamily: 'var(--font-mono)' }}>{import.meta.env.VITE_API_URL || '/api'}</span>
-            </div>
+        <button
+          id="tab-settings-rules"
+          className={`btn ${activeTab === 'rules' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setActiveTab('rules')}
+        >
+          Detection Signatures & Simulator
+        </button>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Liveness Status:</span>
-              <span style={{ color: 'var(--status-healthy)', fontWeight: 600 }}>
-                {health?.components?.api?.status === 'up' ? 'Online (HTTP 200)' : 'Pending'}
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Relational Database:</span>
-              <span style={{ color: isDbConnected ? 'var(--status-healthy)' : 'var(--status-warning)', fontWeight: 600 }}>
-                {isDbConnected ? 'Connected (Azure SQL / MSSQL)' : 'Degraded / Local Fallback'}
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>System Uptime:</span>
-              <span style={{ fontFamily: 'var(--font-mono)' }}>
-                {health?.uptimeSeconds !== undefined ? `${health.uptimeSeconds} seconds` : 'Active'}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Cloud Security Architecture */}
-        <div className="panel">
-          <div className="panel-header">
-            <h3>Cloud Security Controls</h3>
-            <StatusBadge type="info">Azure Native</StatusBadge>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '13px', marginTop: '12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Transport Encryption:</span>
-              <span style={{ color: 'var(--status-healthy)' }}>HTTPS (TLS 1.2+ Enforced)</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Object Storage Isolation:</span>
-              <span style={{ color: 'var(--status-healthy)' }}>Private Container (leaklens-scans)</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Service Identity:</span>
-              <span style={{ color: 'var(--status-healthy)' }}>Microsoft Entra Managed Identity</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Runtime Secrets:</span>
-              <span style={{ color: 'var(--status-healthy)' }}>Azure Key Vault (RBAC Authorized)</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>HTTP Perimeter Headers:</span>
-              <span style={{ color: 'var(--status-healthy)' }}>CSP, HSTS, X-Frame-Options: DENY</span>
-            </div>
-          </div>
-        </div>
+        <button
+          id="tab-settings-diagnostics"
+          className={`btn ${activeTab === 'diagnostics' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setActiveTab('diagnostics')}
+        >
+          Cloud Architecture & Diagnostics
+        </button>
       </div>
 
-      {/* Detection Engine Configuration */}
-      <div className="panel">
-        <div className="panel-header">
-          <h3>Active Detection Signatures</h3>
-          <StatusBadge type="healthy">4 Signatures Live</StatusBadge>
-        </div>
+      {/* TAB 1: Profile & Preferences */}
+      {activeTab === 'profile' && (
+        <form onSubmit={handleSavePreferences} style={{ maxWidth: '720px' }}>
+          {saveStatus && (
+            <div style={{
+              padding: '12px 16px',
+              borderRadius: 'var(--radius-md)',
+              marginBottom: '16px',
+              fontSize: '13px',
+              backgroundColor: saveStatus.type === 'success' ? 'var(--status-healthy-bg)' : 'var(--status-danger-bg)',
+              color: saveStatus.type === 'success' ? 'var(--status-healthy)' : 'var(--status-danger)',
+              border: `1px solid ${saveStatus.type === 'success' ? 'var(--status-healthy)' : 'var(--status-danger)'}`
+            }}>
+              {saveStatus.message}
+            </div>
+          )}
 
-        <div style={{ padding: 0, overflowX: 'auto', marginTop: '12px' }}>
-          <table className="table" style={{ margin: 0 }}>
-            <thead>
-              <tr>
-                <th>Signature Name</th>
-                <th>Category</th>
-                <th>Severity</th>
-                <th>Regex Pattern Specification</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {detectionRules.map(rule => (
-                <tr key={rule.name}>
-                  <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{rule.name}</td>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{rule.category}</td>
-                  <td>
-                    <StatusBadge type={rule.severity === 'critical' ? 'critical' : 'warning'}>
-                      {rule.severity}
-                    </StatusBadge>
-                  </td>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    <code>{rule.pattern}</code>
-                  </td>
-                  <td>
-                    <StatusBadge type="healthy">{rule.status}</StatusBadge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="panel-header">
+              <h3>Operator Identity</h3>
+              <StatusBadge type={user?.role === 'ADMIN' ? 'danger' : user?.role === 'ANALYST' ? 'info' : 'warning'}>
+                {user?.role || 'OPERATOR'}
+              </StatusBadge>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                Display Name
+              </label>
+              <input
+                id="input-settings-display-name"
+                type="text"
+                className="input"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                style={{ width: '100%', maxWidth: '400px' }}
+                placeholder="Enter your name or callsign"
+                required
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                Assigned Identity / Email
+              </label>
+              <input
+                type="text"
+                className="input"
+                value={user?.email || 'analyst@leaklens.local'}
+                disabled
+                style={{ width: '100%', maxWidth: '400px', opacity: 0.7, backgroundColor: 'var(--bg-app)' }}
+              />
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>
+                Security Note: Email and role authority are strictly governed server-side and cannot be altered client-side.
+              </span>
+            </div>
+          </div>
+
+          <div className="panel" style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="panel-header">
+              <h3>Scanning & Masking Client Preferences</h3>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                Max Upload Advisory Ceiling
+              </label>
+              <select
+                id="select-settings-upload-threshold"
+                className="input"
+                style={{ maxWidth: '240px' }}
+                value={preferences.maxUploadThresholdMb}
+                onChange={(e) => setPreferences({ ...preferences, maxUploadThresholdMb: Number(e.target.value) })}
+              >
+                <option value={2}>2 MB (Strict Conservative)</option>
+                <option value={5}>5 MB (LeakLens Default)</option>
+                <option value={10}>10 MB (Enterprise Ceiling)</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                Redaction Preview Format
+              </label>
+              <div style={{ display: 'flex', gap: '16px', fontSize: '13px', marginTop: '4px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="maskingStyle"
+                    value="standard"
+                    checked={preferences.maskingStyle === 'standard'}
+                    onChange={() => setPreferences({ ...preferences, maskingStyle: 'standard' })}
+                  />
+                  <span>Standard Affix Masking (e.g., <code>AKIA***EXMP</code>)</span>
+                </label>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="maskingStyle"
+                    value="full"
+                    checked={preferences.maskingStyle === 'full'}
+                    onChange={() => setPreferences({ ...preferences, maskingStyle: 'full' })}
+                  />
+                  <span>Full Redaction (<code>[CONFIDENTIAL_REDACTED]</code>)</span>
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                Telemetry Auto-Refresh Rate
+              </label>
+              <select
+                id="select-settings-refresh-rate"
+                className="input"
+                style={{ maxWidth: '240px' }}
+                value={preferences.autoRefreshIntervalSec}
+                onChange={(e) => setPreferences({ ...preferences, autoRefreshIntervalSec: Number(e.target.value) })}
+              >
+                <option value={0}>Disabled (Manual Refresh)</option>
+                <option value={30}>Every 30 Seconds</option>
+                <option value={60}>Every 60 Seconds</option>
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+              <button id="btn-save-preferences" type="submit" className="btn btn-primary">
+                Save Preferences
+              </button>
+              <button id="btn-reset-preferences" type="button" className="btn btn-secondary" onClick={handleResetPreferences}>
+                Reset to Defaults
+              </button>
+            </div>
+          </div>
+        </form>
+      )}
+
+      {/* TAB 2: Rules & Pattern Simulator */}
+      {activeTab === 'rules' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Active Detection Signatures */}
+          <div className="panel">
+            <div className="panel-header">
+              <h3>Active Detection Signatures</h3>
+              <StatusBadge type="healthy">4 Signatures Live</StatusBadge>
+            </div>
+
+            <div style={{ overflowX: 'auto', marginTop: '12px' }}>
+              <table className="table" style={{ width: '100%', fontSize: '13px', textAlign: 'left', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border-medium)', color: 'var(--text-muted)' }}>
+                    <th style={{ padding: '10px 12px' }}>Signature Name</th>
+                    <th style={{ padding: '10px 12px' }}>Category</th>
+                    <th style={{ padding: '10px 12px' }}>Severity</th>
+                    <th style={{ padding: '10px 12px' }}>Regex Pattern Specification</th>
+                    <th style={{ padding: '10px 12px' }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detectionRules.map(rule => (
+                    <tr key={rule.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                      <td style={{ padding: '10px 12px', fontWeight: 600 }}>{rule.name}</td>
+                      <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{rule.category}</td>
+                      <td style={{ padding: '10px 12px' }}>
+                        <StatusBadge type={rule.severity === 'critical' ? 'danger' : 'warning'}>
+                          {rule.severity}
+                        </StatusBadge>
+                      </td>
+                      <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                        <code>{rule.regex.source}</code>
+                      </td>
+                      <td style={{ padding: '10px 12px' }}>
+                        <StatusBadge type="healthy">{rule.status}</StatusBadge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Interactive Live Pattern Simulator */}
+          <div className="panel">
+            <div className="panel-header">
+              <div>
+                <h3>Interactive Pattern Scanner & Masking Simulator</h3>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  Test synthetic snippets against detection signatures in memory with instant redaction verification.
+                </p>
+              </div>
+            </div>
+
+            <div style={{ marginTop: '12px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                Candidate Test String / Configuration Dump
+              </label>
+              <textarea
+                id="input-simulator-text"
+                className="input"
+                rows={4}
+                value={simulatorInput}
+                onChange={(e) => setSimulatorInput(e.target.value)}
+                style={{ width: '100%', fontFamily: 'var(--font-mono)', fontSize: '12px', lineHeight: 1.5 }}
+                placeholder="Paste sample config, env dump, or connection string..."
+              />
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                <button id="btn-run-simulator" className="btn btn-primary" onClick={handleRunSimulator}>
+                  Simulate In-Memory Scan & Mask
+                </button>
+                <button className="btn btn-secondary" onClick={() => { setSimulatorInput(''); setSimulatorResults(null); }}>
+                  Clear Text
+                </button>
+              </div>
+
+              {simulatorResults !== null && (
+                <div style={{ marginTop: '16px' }}>
+                  <h4 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
+                    Simulation Results ({simulatorResults.length} Matched)
+                  </h4>
+                  {simulatorResults.length === 0 ? (
+                    <div style={{ padding: '12px', background: 'var(--bg-app)', borderRadius: 'var(--radius-sm)', color: 'var(--status-healthy)', fontSize: '13px' }}>
+                      ✓ No secret signatures detected in sample input.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {simulatorResults.map((res, i) => (
+                        <div key={i} style={{ padding: '10px 12px', background: 'var(--bg-app)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', fontSize: '13px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                            <span style={{ fontWeight: 600 }}>{res.ruleName}</span>
+                            <StatusBadge type={res.severity === 'critical' ? 'danger' : 'warning'}>{res.severity}</StatusBadge>
+                          </div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                            Masked Output:{' '}
+                            <code style={{ color: 'var(--accent-cyan)', fontFamily: 'var(--font-mono)' }}>{res.maskedExcerpt}</code>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* TAB 3: Diagnostics & Cloud Architecture */}
+      {activeTab === 'diagnostics' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
+          {/* Runtime Diagnostics */}
+          <div className="panel">
+            <div className="panel-header">
+              <h3>Runtime Diagnostics</h3>
+              <StatusBadge type="healthy">{(diagnosticsHealth || health)?.environment || 'production'}</StatusBadge>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '13px', marginTop: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>API Gateway:</span>
+                <span style={{ fontFamily: 'var(--font-mono)' }}>{import.meta.env.VITE_API_URL || '/api'}</span>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Liveness Status:</span>
+                <span style={{ color: 'var(--status-healthy)', fontWeight: 600 }}>
+                  {(diagnosticsHealth || health)?.components?.api?.status === 'up' ? 'Online (HTTP 200)' : 'Pending'}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Relational Database:</span>
+                <span style={{ color: isDbConnected ? 'var(--status-healthy)' : 'var(--status-warning)', fontWeight: 600 }}>
+                  {isDbConnected ? 'Connected (Azure SQL / MSSQL)' : 'Degraded / Local Fallback'}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Last Ping Latency:</span>
+                <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-cyan)' }}>
+                  {pingLatency !== null ? `${pingLatency} ms` : 'Not tested'}
+                </span>
+              </div>
+
+              <div style={{ marginTop: '8px' }}>
+                <button
+                  id="btn-ping-diagnostics"
+                  className="btn btn-secondary"
+                  onClick={handlePingDiagnostics}
+                  disabled={pinging}
+                  style={{ width: '100%', justifyContent: 'center' }}
+                >
+                  {pinging ? 'Pinging /health...' : 'Execute Live Diagnostics Ping'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Cloud Security Architecture */}
+          <div className="panel">
+            <div className="panel-header">
+              <h3>Cloud Security Architecture</h3>
+              <StatusBadge type="info">Azure Native</StatusBadge>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '13px', marginTop: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Transport Encryption:</span>
+                <span style={{ color: 'var(--status-healthy)' }}>HTTPS (TLS 1.2+ Enforced)</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Object Storage Isolation:</span>
+                <span style={{ color: 'var(--status-healthy)' }}>Private Container (leaklens-scans)</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Service Identity:</span>
+                <span style={{ color: 'var(--status-healthy)' }}>Microsoft Entra Managed Identity</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Runtime Secrets:</span>
+                <span style={{ color: 'var(--status-healthy)' }}>Azure Key Vault (RBAC Authorized)</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>HTTP Perimeter Headers:</span>
+                <span style={{ color: 'var(--status-healthy)' }}>CSP, HSTS, X-Frame-Options: DENY</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

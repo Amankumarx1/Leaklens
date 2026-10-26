@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { getScans } from '../services/api';
 import LoadingState from '../components/LoadingState';
 import EmptyState from '../components/EmptyState';
@@ -9,29 +9,54 @@ export function ScansPage({ user, onNavigate }) {
   const [scans, setScans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const fetchScansList = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await getScans();
+      if (res?.success) {
+        setScans(res.data || []);
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to load historical scans.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let isMounted = true;
-
-    async function loadScans() {
+    let ignore = false;
+    async function load() {
       try {
-        setError(null);
         const res = await getScans();
-        if (isMounted && res?.success) {
+        if (!ignore && res?.success) {
           setScans(res.data || []);
         }
       } catch (err) {
-        if (isMounted) setError(err.message);
+        if (!ignore) setError(err.message || 'Failed to load historical scans.');
       } finally {
-        if (isMounted) setLoading(false);
+        if (!ignore) setLoading(false);
       }
     }
-
-    loadScans();
-    return () => { isMounted = false; };
+    load();
+    return () => { ignore = true; };
   }, []);
 
   const canScan = user?.role !== 'COMPLIANCE_REVIEWER';
+
+  const filteredScans = scans.filter(scan => {
+    if (statusFilter && scan.status !== statusFilter) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const nameMatch = (scan.original_filename || '').toLowerCase().includes(q);
+      const idMatch = (scan.scan_id || '').toLowerCase().includes(q);
+      return nameMatch || idMatch;
+    }
+    return true;
+  });
 
   return (
     <div>
@@ -45,8 +70,14 @@ export function ScansPage({ user, onNavigate }) {
           </div>
 
           <div style={{ display: 'flex', gap: '10px' }}>
-            <button className="btn btn-secondary" onClick={fetchScansList} title="Refresh scan list">
-              Refresh
+            <button 
+              id="btn-scans-refresh"
+              className="btn btn-secondary" 
+              onClick={fetchScansList} 
+              disabled={loading}
+              title="Refresh scan list"
+            >
+              {loading ? 'Refreshing...' : 'Refresh'}
             </button>
             {canScan && (
               <button
@@ -60,16 +91,90 @@ export function ScansPage({ user, onNavigate }) {
           </div>
         </div>
 
-        {loading ? (
+        {/* Filter Toolbar */}
+        <div style={{
+          display: 'flex',
+          gap: '12px',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          background: 'var(--bg-app)',
+          padding: '12px 16px',
+          borderRadius: 'var(--radius-md)',
+          marginBottom: '20px',
+          border: '1px solid var(--border-subtle)'
+        }}>
+          <div style={{ flex: 1, minWidth: '220px' }}>
+            <input
+              type="text"
+              placeholder="Search by filename or Scan ID..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '6px 10px',
+                backgroundColor: 'var(--bg-surface)',
+                border: '1px solid var(--border-medium)',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--text-primary)',
+                fontSize: '13px',
+                outline: 'none'
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
+            <span style={{ color: 'var(--text-muted)' }}>Status:</span>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              style={{
+                backgroundColor: 'var(--bg-surface)',
+                border: '1px solid var(--border-medium)',
+                color: 'var(--text-primary)',
+                padding: '6px 10px',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '13px'
+              }}
+            >
+              <option value="">All Statuses</option>
+              <option value="completed">Completed</option>
+              <option value="failed">Failed</option>
+              <option value="in_progress">In Progress</option>
+            </select>
+          </div>
+
+          {(statusFilter || searchQuery) && (
+            <button
+              className="btn btn-secondary"
+              style={{ fontSize: '12px', padding: '4px 10px' }}
+              onClick={() => {
+                setStatusFilter('');
+                setSearchQuery('');
+              }}
+            >
+              Clear Filters
+            </button>
+          )}
+
+          <div style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--text-muted)' }}>
+            Showing {filteredScans.length} of {scans.length} scans
+          </div>
+        </div>
+
+        {loading && scans.length === 0 ? (
           <LoadingState message="Loading scan execution records..." />
-        ) : error ? (
+        ) : error && scans.length === 0 ? (
           <ErrorState title="Failed to Load Scans" message={error} onRetry={fetchScansList} />
-        ) : scans.length === 0 ? (
+        ) : filteredScans.length === 0 ? (
           <EmptyState
-            title="No Scans Executed Yet"
-            description="No files have been inspected. Upload an authorized file to evaluate against secret signatures."
-            actionText={canScan ? "Initiate First Scan" : null}
-            onAction={canScan ? () => onNavigate('scans-new') : null}
+            title={scans.length === 0 ? "No Scans Executed Yet" : "No Matching Scans Found"}
+            description={
+              scans.length === 0
+                ? "No files have been inspected. Upload an authorized file to evaluate against secret signatures."
+                : "No scan jobs match your current search and status filter."
+            }
+            actionText={canScan && scans.length === 0 ? "Initiate First Scan" : null}
+            onAction={canScan && scans.length === 0 ? () => onNavigate('scans-new') : null}
           />
         ) : (
           <div style={{ overflowX: 'auto' }}>
@@ -86,7 +191,7 @@ export function ScansPage({ user, onNavigate }) {
                 </tr>
               </thead>
               <tbody>
-                {scans.map((scan) => (
+                {filteredScans.map((scan) => (
                   <tr
                     key={scan.scan_id}
                     style={{ borderBottom: '1px solid var(--border-subtle)', transition: 'background 0.15s' }}
@@ -120,6 +225,7 @@ export function ScansPage({ user, onNavigate }) {
                     </td>
                     <td style={{ padding: '14px', textAlign: 'right' }}>
                       <button
+                        id={`btn-inspect-scan-${scan.scan_id}`}
                         className="btn btn-secondary"
                         style={{ fontSize: '12px', padding: '4px 10px' }}
                         onClick={() => onNavigate('scan-detail', scan.scan_id)}

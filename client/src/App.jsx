@@ -11,6 +11,7 @@ import NewIncidentPage from './pages/NewIncidentPage';
 import IncidentDetailPage from './pages/IncidentDetailPage';
 import AuditLogsPage from './pages/AuditLogsPage';
 import SettingsPage from './pages/SettingsPage';
+import AnalyticsPage from './pages/AnalyticsPage';
 import useHealth from './hooks/useHealth';
 import { getProfile, logout, getAuthToken } from './services/api';
 
@@ -24,18 +25,80 @@ const ROUTE_TITLES = {
   'incidents-new': 'Create Security Incident',
   'incident-detail': 'Incident Response Workspace',
   'audit-logs': 'Defensive Audit Trail',
-  settings: 'System Configuration'
+  settings: 'System Configuration',
+  analytics: 'Security Posture Analytics & Power BI',
+  'not-found': '404 — Page Not Found'
 };
+
+const VALID_ROUTES = [
+  'dashboard',
+  'scans',
+  'scans-new',
+  'scan-detail',
+  'findings',
+  'incidents',
+  'incidents-new',
+  'incident-detail',
+  'audit-logs',
+  'settings',
+  'analytics'
+];
+
+function parseHashRoute() {
+  const hash = window.location.hash.replace(/^#\/?/, '').trim();
+  if (!hash) return { route: 'dashboard', paramId: null };
+  const parts = hash.split('/');
+  const route = parts[0] || 'dashboard';
+  const paramId = parts[1] || null;
+  return {
+    route: VALID_ROUTES.includes(route) ? route : 'not-found',
+    paramId
+  };
+}
+
+function NotFoundPage({ onNavigate }) {
+  return (
+    <div className="panel" style={{ textAlign: 'center', padding: '64px 24px' }}>
+      <div style={{ fontSize: '56px', fontWeight: '800', color: 'var(--status-danger)', marginBottom: '12px' }}>
+        404
+      </div>
+      <h3 style={{ fontSize: '20px', marginBottom: '8px' }}>Route Not Found</h3>
+      <p style={{ color: 'var(--text-secondary)', marginBottom: '24px', maxWidth: '440px', margin: '0 auto 24px' }}>
+        The requested navigation endpoint does not exist or has been relocated within the LeakLens defensive portal.
+      </p>
+      <button className="btn btn-primary" onClick={() => onNavigate('dashboard')}>
+        ← Return to Security Dashboard
+      </button>
+    </div>
+  );
+}
 
 export function App() {
   const [user, setUser] = useState(null);
   const [authChecking, setAuthChecking] = useState(true);
-  const [activeRoute, setActiveRoute] = useState('dashboard');
-  const [selectedScanId, setSelectedScanId] = useState(null);
-  const [selectedIncidentId, setSelectedIncidentId] = useState(null);
-  const [selectedFindingId, setSelectedFindingId] = useState(null);
+
+  // Initialize route from current URL hash
+  const initial = parseHashRoute();
+  const [activeRoute, setActiveRoute] = useState(initial.route);
+  const [selectedScanId, setSelectedScanId] = useState(initial.route === 'scan-detail' ? initial.paramId : null);
+  const [selectedIncidentId, setSelectedIncidentId] = useState(initial.route === 'incident-detail' ? initial.paramId : null);
+  const [selectedFindingId, setSelectedFindingId] = useState(initial.route === 'incidents-new' ? initial.paramId : null);
 
   const { health, loading: healthLoading, error: healthError, refetch: refetchHealth } = useHealth(20000);
+
+  // Sync state with browser back/forward (hashchange / popstate)
+  useEffect(() => {
+    const handleHashChange = () => {
+      const { route, paramId } = parseHashRoute();
+      setActiveRoute(route);
+      if (route === 'scan-detail' && paramId) setSelectedScanId(paramId);
+      if (route === 'incident-detail' && paramId) setSelectedIncidentId(paramId);
+      if (route === 'incidents-new' && paramId) setSelectedFindingId(paramId);
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   // Check existing session on mount
   useEffect(() => {
@@ -71,6 +134,9 @@ export function App() {
       if (route === 'scan-detail') setSelectedScanId(paramId);
       if (route === 'incident-detail') setSelectedIncidentId(paramId);
       if (route === 'incidents-new') setSelectedFindingId(paramId);
+      window.location.hash = `#/${route}/${paramId}`;
+    } else {
+      window.location.hash = `#/${route}`;
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -79,6 +145,7 @@ export function App() {
     await logout();
     setUser(null);
     setActiveRoute('dashboard');
+    window.location.hash = '#/dashboard';
   };
 
   // Render Login view if user is unauthenticated
@@ -96,7 +163,8 @@ export function App() {
       <LoginPage 
         onLoginSuccess={(authedUser) => {
           setUser(authedUser);
-          setActiveRoute('dashboard');
+          const { route } = parseHashRoute();
+          setActiveRoute(route === 'not-found' ? 'dashboard' : route);
         }} 
       />
     );
@@ -123,9 +191,11 @@ export function App() {
       case 'audit-logs':
         return <AuditLogsPage />;
       case 'settings':
-        return <SettingsPage health={health} />;
+        return <SettingsPage health={health} user={user} onNavigate={handleNavigate} />;
+      case 'analytics':
+        return <AnalyticsPage onNavigate={handleNavigate} />;
       default:
-        return <DashboardPage health={health} user={user} onNavigate={handleNavigate} />;
+        return <NotFoundPage onNavigate={handleNavigate} />;
     }
   };
 

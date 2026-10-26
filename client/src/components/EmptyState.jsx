@@ -2,11 +2,16 @@ import React from 'react';
 
 export function EmptyState({ 
   title = 'No Data Available', 
-  description = 'No scans or exposure findings have been recorded yet.', 
-  actionText, 
+  description,
+  message,
+  actionText,
+  actionLabel, 
   onAction,
   icon
 }) {
+  const resolvedDescription = description || message || 'No scans or exposure findings have been recorded yet.';
+  const resolvedActionText = actionText || actionLabel;
+
   return (
     <div className="empty-state">
       <div className="empty-state-icon">
@@ -17,10 +22,10 @@ export function EmptyState({
         )}
       </div>
       <h4 className="empty-state-title">{title}</h4>
-      <p className="empty-state-description">{description}</p>
-      {actionText && (
+      <p className="empty-state-description">{resolvedDescription}</p>
+      {resolvedActionText && onAction && (
         <button className="btn btn-secondary" onClick={onAction}>
-          {actionText}
+          {resolvedActionText}
         </button>
       )}
     </div>

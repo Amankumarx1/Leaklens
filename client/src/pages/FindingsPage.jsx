@@ -12,16 +12,20 @@ export function FindingsPage({ onNavigate, user }) {
   const [error, setError] = useState(null);
   const [severityFilter, setSeverityFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [activeFinding, setActiveFinding] = useState(null);
 
   const isCompliance = user?.role === 'COMPLIANCE_REVIEWER';
 
   const fetchFindingsList = useCallback(async () => {
     try {
+      setLoading(true);
       setError(null);
       const params = {};
       if (severityFilter) params.severity = severityFilter;
       if (categoryFilter) params.category = categoryFilter;
+      if (statusFilter) params.status = statusFilter;
 
       const res = await getFindings(params);
       if (res?.success) {
@@ -32,17 +36,16 @@ export function FindingsPage({ onNavigate, user }) {
     } finally {
       setLoading(false);
     }
-  }, [severityFilter, categoryFilter]);
+  }, [severityFilter, categoryFilter, statusFilter]);
 
   useEffect(() => {
     let ignore = false;
-
     async function load() {
       try {
-        setError(null);
         const params = {};
         if (severityFilter) params.severity = severityFilter;
         if (categoryFilter) params.category = categoryFilter;
+        if (statusFilter) params.status = statusFilter;
 
         const res = await getFindings(params);
         if (!ignore && res?.success) {
@@ -54,13 +57,33 @@ export function FindingsPage({ onNavigate, user }) {
         if (!ignore) setLoading(false);
       }
     }
-
     load();
     return () => { ignore = true; };
-  }, [severityFilter, categoryFilter]);
+  }, [severityFilter, categoryFilter, statusFilter]);
 
   const handleEscalate = (findingId) => {
     onNavigate('incidents-new', findingId);
+  };
+
+  // Filter client-side by text search across filename, rule_name, excerpt, location
+  const filteredFindings = findings.filter(f => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    const nameMatch = (f.original_filename || '').toLowerCase().includes(q);
+    const ruleMatch = (f.rule_name || '').toLowerCase().includes(q);
+    const excerptMatch = (f.masked_excerpt || '').toLowerCase().includes(q);
+    const locMatch = (f.location_reference || '').toLowerCase().includes(q);
+    const catMatch = (f.category || '').toLowerCase().includes(q);
+    return nameMatch || ruleMatch || excerptMatch || locMatch || catMatch;
+  });
+
+  const hasActiveFilters = Boolean(severityFilter || categoryFilter || statusFilter || searchQuery);
+
+  const handleClearFilters = () => {
+    setSeverityFilter('');
+    setCategoryFilter('');
+    setStatusFilter('');
+    setSearchQuery('');
   };
 
   return (
@@ -74,15 +97,23 @@ export function FindingsPage({ onNavigate, user }) {
             </p>
           </div>
 
-          <button className="btn btn-secondary" onClick={fetchFindingsList}>
-            Refresh
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button 
+              id="btn-findings-refresh"
+              className="btn btn-secondary" 
+              onClick={fetchFindingsList}
+              disabled={loading}
+              title="Refresh findings list"
+            >
+              {loading ? 'Refreshing...' : 'Refresh'}
+            </button>
+          </div>
         </div>
 
         {/* Filter Toolbar */}
         <div style={{
           display: 'flex',
-          gap: '14px',
+          gap: '12px',
           alignItems: 'center',
           flexWrap: 'wrap',
           background: 'var(--bg-app)',
@@ -91,9 +122,32 @@ export function FindingsPage({ onNavigate, user }) {
           marginBottom: '20px',
           border: '1px solid var(--border-subtle)'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
+          {/* Text Search Input */}
+          <div style={{ flex: 1, minWidth: '220px' }}>
+            <input
+              id="input-findings-search"
+              type="text"
+              placeholder="Search by rule, file, excerpt, location..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '6px 10px',
+                backgroundColor: 'var(--bg-surface)',
+                border: '1px solid var(--border-medium)',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--text-primary)',
+                fontSize: '13px',
+                outline: 'none'
+              }}
+            />
+          </div>
+
+          {/* Severity Filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
             <span style={{ color: 'var(--text-muted)' }}>Severity:</span>
             <select
+              id="select-finding-severity"
               value={severityFilter}
               onChange={(e) => setSeverityFilter(e.target.value)}
               style={{
@@ -113,9 +167,11 @@ export function FindingsPage({ onNavigate, user }) {
             </select>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
+          {/* Category Filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
             <span style={{ color: 'var(--text-muted)' }}>Category:</span>
             <select
+              id="select-finding-category"
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
               style={{
@@ -135,39 +191,60 @@ export function FindingsPage({ onNavigate, user }) {
             </select>
           </div>
 
-          {(severityFilter || categoryFilter) && (
+          {/* Status Filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
+            <span style={{ color: 'var(--text-muted)' }}>Status:</span>
+            <select
+              id="select-finding-status"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              style={{
+                backgroundColor: 'var(--bg-surface)',
+                border: '1px solid var(--border-medium)',
+                color: 'var(--text-primary)',
+                padding: '6px 10px',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '13px'
+              }}
+            >
+              <option value="">All Statuses</option>
+              <option value="detected">Detected</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="remediated">Remediated</option>
+            </select>
+          </div>
+
+          {hasActiveFilters && (
             <button
+              id="btn-findings-clear-filters"
               className="btn btn-secondary"
               style={{ fontSize: '12px', padding: '4px 10px' }}
-              onClick={() => {
-                setSeverityFilter('');
-                setCategoryFilter('');
-              }}
+              onClick={handleClearFilters}
             >
               Clear Filters
             </button>
           )}
 
           <div style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--text-muted)' }}>
-            Showing {findings.length} findings
+            Showing {filteredFindings.length} of {findings.length} findings
           </div>
         </div>
 
         {/* Findings Table */}
-        {loading ? (
+        {loading && findings.length === 0 ? (
           <LoadingState message="Loading persisted findings..." />
-        ) : error ? (
+        ) : error && findings.length === 0 ? (
           <ErrorState title="Failed to Load Findings" message={error} onRetry={fetchFindingsList} />
-        ) : findings.length === 0 ? (
+        ) : filteredFindings.length === 0 ? (
           <EmptyState
-            title="No Findings Found"
+            title={findings.length === 0 ? "No Findings Recorded" : "No Matching Findings"}
             description={
-              severityFilter || categoryFilter
-                ? 'No findings match the selected severity and category filters.'
-                : 'No exposure findings have been recorded yet. Initiate a scan to evaluate files.'
+              hasActiveFilters
+                ? 'No exposure findings match your current search and filter selections.'
+                : 'No exposure findings have been recorded yet. Initiate an authorized scan to evaluate files.'
             }
-            actionText="Initiate File Scan"
-            onAction={() => onNavigate('scans-new')}
+            actionText={hasActiveFilters ? "Clear Filters" : "Initiate File Scan"}
+            onAction={hasActiveFilters ? handleClearFilters : () => onNavigate('scans-new')}
           />
         ) : (
           <div style={{ overflowX: 'auto' }}>
@@ -184,9 +261,10 @@ export function FindingsPage({ onNavigate, user }) {
                 </tr>
               </thead>
               <tbody>
-                {findings.map((f) => (
+                {filteredFindings.map((f) => (
                   <tr
                     key={f.finding_id}
+                    id={`finding-row-${f.finding_id}`}
                     style={{ borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer' }}
                     onClick={() => setActiveFinding(f)}
                     className="hover-row"
@@ -211,12 +289,13 @@ export function FindingsPage({ onNavigate, user }) {
                       {f.original_filename || 'File'}
                     </td>
                     <td style={{ padding: '12px 14px' }}>
-                      <StatusBadge type={f.status === 'remediated' ? 'success' : f.status === 'confirmed' ? 'warning' : 'info'}>
+                      <StatusBadge type={f.status === 'remediated' ? 'healthy' : f.status === 'confirmed' ? 'warning' : 'info'}>
                         {f.status || 'detected'}
                       </StatusBadge>
                     </td>
                     <td style={{ padding: '12px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                       <button
+                        id={`btn-inspect-finding-${f.finding_id}`}
                         className="btn btn-secondary"
                         style={{ fontSize: '11px', padding: '3px 8px', marginRight: '6px' }}
                         onClick={(e) => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import StatusBadge from '../components/StatusBadge';
 import EmptyState from '../components/EmptyState';
 import { getIncidents, getIncidentMetrics } from '../services/api';
@@ -18,6 +18,7 @@ export function IncidentsPage({ user, onNavigate }) {
 
   const loadData = useCallback(async () => {
     try {
+      setLoading(true);
       setError(null);
 
       const params = {};
@@ -26,7 +27,7 @@ export function IncidentsPage({ user, onNavigate }) {
 
       const [incRes, metRes] = await Promise.all([
         getIncidents(params),
-        getIncidentMetrics()
+        getIncidentMetrics().catch(() => null)
       ]);
 
       if (incRes?.success && incRes?.data) {
@@ -44,17 +45,15 @@ export function IncidentsPage({ user, onNavigate }) {
 
   useEffect(() => {
     let ignore = false;
-
     async function load() {
       try {
-        setError(null);
         const params = {};
         if (statusFilter) params.status = statusFilter;
         if (priorityFilter) params.priority = priorityFilter;
 
         const [incRes, metRes] = await Promise.all([
           getIncidents(params),
-          getIncidentMetrics()
+          getIncidentMetrics().catch(() => null)
         ]);
 
         if (!ignore && incRes?.success && incRes?.data) {
@@ -69,7 +68,6 @@ export function IncidentsPage({ user, onNavigate }) {
         if (!ignore) setLoading(false);
       }
     }
-
     load();
     return () => { ignore = true; };
   }, [statusFilter, priorityFilter]);
@@ -83,6 +81,14 @@ export function IncidentsPage({ user, onNavigate }) {
       inc.assigned_user_name?.toLowerCase().includes(q)
     );
   });
+
+  const hasActiveFilters = Boolean(statusFilter || priorityFilter || searchQuery);
+
+  const handleClearFilters = () => {
+    setStatusFilter('');
+    setPriorityFilter('');
+    setSearchQuery('');
+  };
 
   return (
     <div className="page-container">
@@ -150,8 +156,9 @@ export function IncidentsPage({ user, onNavigate }) {
       )}
 
       {/* Filters Bar */}
-      <div className="filter-bar" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '16px' }}>
+      <div className="filter-bar" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '16px', alignItems: 'center' }}>
         <input
+          id="input-incidents-search"
           type="text"
           className="form-input"
           placeholder="Search by title, ID, or assignee..."
@@ -189,18 +196,35 @@ export function IncidentsPage({ user, onNavigate }) {
           <option value="LOW">LOW</option>
         </select>
 
-        <button className="btn btn-secondary" onClick={loadData}>
-          Refresh
+        {hasActiveFilters && (
+          <button 
+            id="btn-incidents-clear-filters"
+            className="btn btn-secondary" 
+            onClick={handleClearFilters}
+            style={{ fontSize: '12px' }}
+          >
+            Clear Filters
+          </button>
+        )}
+
+        <button 
+          id="btn-incidents-refresh"
+          className="btn btn-secondary" 
+          onClick={loadData}
+          disabled={loading}
+          style={{ marginLeft: 'auto' }}
+        >
+          {loading ? 'Refreshing...' : 'Refresh'}
         </button>
       </div>
 
       {/* Content Area */}
-      {loading ? (
+      {loading && incidents.length === 0 ? (
         <div className="state-center" style={{ minHeight: '260px' }}>
           <div className="spinner" />
           <p style={{ color: 'var(--text-secondary)' }}>Loading security incidents from database...</p>
         </div>
-      ) : error ? (
+      ) : error && incidents.length === 0 ? (
         <div className="alert alert-danger" style={{ marginBottom: '16px' }}>
           <strong>Error loading incidents:</strong> {error}
           <div style={{ marginTop: '8px' }}>
@@ -209,12 +233,12 @@ export function IncidentsPage({ user, onNavigate }) {
         </div>
       ) : filteredIncidents.length === 0 ? (
         <EmptyState
-          title="No Security Incidents Found"
-          message={statusFilter || priorityFilter || searchQuery
-            ? "No incidents match the active filters. Adjust your criteria or clear filters."
+          title={incidents.length === 0 ? "No Security Incidents Found" : "No Matching Incidents"}
+          description={hasActiveFilters
+            ? "No incidents match the active search or filters. Adjust criteria or clear filters."
             : "No security exposure incidents have been escalated yet. You can create an incident from detected findings."}
-          actionLabel={!isCompliance && !statusFilter && !priorityFilter ? "Create First Incident" : undefined}
-          onAction={!isCompliance && !statusFilter && !priorityFilter ? () => onNavigate('incidents-new') : undefined}
+          actionText={!isCompliance && !hasActiveFilters ? "Create First Incident" : hasActiveFilters ? "Clear Filters" : undefined}
+          onAction={!isCompliance && !hasActiveFilters ? () => onNavigate('incidents-new') : hasActiveFilters ? handleClearFilters : undefined}
         />
       ) : (
         <div className="data-table-container">
@@ -245,7 +269,12 @@ export function IncidentsPage({ user, onNavigate }) {
                   : 'warning';
 
                 return (
-                  <tr key={inc.incident_id} id={`incident-row-${inc.incident_id}`}>
+                  <tr 
+                    key={inc.incident_id} 
+                    id={`incident-row-${inc.incident_id}`}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => onNavigate('incident-detail', inc.incident_id)}
+                  >
                     <td style={{ fontFamily: 'monospace', fontSize: '12px' }} title={inc.incident_id}>
                       {inc.incident_id.slice(0, 8)}...
                     </td>
@@ -278,7 +307,10 @@ export function IncidentsPage({ user, onNavigate }) {
                         id={`btn-manage-incident-${inc.incident_id}`}
                         className="btn btn-secondary"
                         style={{ padding: '4px 10px', fontSize: '12px' }}
-                        onClick={() => onNavigate('incident-detail', inc.incident_id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onNavigate('incident-detail', inc.incident_id);
+                        }}
                       >
                         Inspect & Respond
                       </button>

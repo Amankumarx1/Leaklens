@@ -26,6 +26,7 @@ export function AppLayout({
           onRefresh={onRefresh}
           user={user}
           onLogout={onLogout}
+          onNavigate={onNavigate}
         />
         <main className="content-viewport">
           {children}
