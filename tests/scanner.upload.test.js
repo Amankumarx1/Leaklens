@@ -32,7 +32,7 @@ describe('File Upload Parsing & Security Controls', () => {
   });
 
   it('should reject unsupported file extensions with 415 error', () => {
-    const unsupportedFiles = ['document.pdf', 'executable.exe', 'archive.zip', 'script.py', 'image.png'];
+    const unsupportedFiles = ['document.pdf', 'executable.exe', 'archive.zip', 'archive.tar', 'image.png'];
 
     for (const filename of unsupportedFiles) {
       expect(() => {

@@ -102,7 +102,12 @@ BEGIN
         CONSTRAINT PK_detection_rules PRIMARY KEY CLUSTERED (rule_id),
         CONSTRAINT UQ_detection_rules_rule_name UNIQUE NONCLUSTERED (rule_name),
         CONSTRAINT CK_detection_rules_severity CHECK (severity IN ('critical', 'high', 'medium', 'low', 'info')),
-        CONSTRAINT CK_detection_rules_category CHECK (category IN ('EMAIL_ADDRESS', 'API_KEY_CANDIDATE', 'PRIVATE_KEY_MARKER', 'SENSITIVE_IDENTIFIER', 'api_key', 'credentials', 'pii', 'financial', 'secret_key', 'infrastructure', 'custom'))
+        CONSTRAINT CK_detection_rules_category CHECK (category IN (
+            'EMAIL_ADDRESS', 'API_KEY_CANDIDATE', 'PRIVATE_KEY_MARKER', 'SENSITIVE_IDENTIFIER',
+            'CLOUD_CREDENTIAL', 'PASSWORD_CREDENTIAL', 'JWT_BEARER_TOKEN', 'DATABASE_CONNECTION_STRING',
+            'TELEPHONE_NUMBER', 'PERSONAL_IDENTIFIER', 'FINANCIAL_IDENTIFIER', 'CONFIDENTIAL_CONFIG', 'HIGH_ENTROPY_SECRET',
+            'api_key', 'credentials', 'pii', 'financial', 'secret_key', 'infrastructure', 'custom'
+        ))
     );
 END
 GO
@@ -119,8 +124,11 @@ BEGIN
         file_id UNIQUEIDENTIFIER NOT NULL,
         rule_id UNIQUEIDENTIFIER NOT NULL,
         location_reference NVARCHAR(256) NOT NULL,
+        field_path NVARCHAR(256) NULL,
         masked_excerpt NVARCHAR(512) NOT NULL,
+        secret_fingerprint CHAR(64) NULL,
         severity NVARCHAR(16) NOT NULL,
+        confidence NVARCHAR(16) NOT NULL CONSTRAINT DF_findings_confidence DEFAULT 'high',
         status NVARCHAR(32) NOT NULL,
         detected_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_findings_detected_at DEFAULT SYSUTCDATETIME(),
         CONSTRAINT PK_findings PRIMARY KEY CLUSTERED (finding_id),
@@ -129,6 +137,7 @@ BEGIN
         CONSTRAINT FK_findings_detection_rules FOREIGN KEY (rule_id) 
             REFERENCES leaklens.detection_rules (rule_id) ON DELETE NO ACTION,
         CONSTRAINT CK_findings_severity CHECK (severity IN ('critical', 'high', 'medium', 'low', 'info')),
+        CONSTRAINT CK_findings_confidence CHECK (confidence IN ('high', 'medium', 'low')),
         CONSTRAINT CK_findings_status CHECK (status IN ('detected', 'confirmed', 'false_positive', 'suppressed', 'remediated'))
     );
 END

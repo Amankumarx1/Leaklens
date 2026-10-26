@@ -2,7 +2,11 @@ import React, { useState, useRef } from 'react';
 import { uploadAndScanFile } from '../services/api';
 import StatusBadge from '../components/StatusBadge';
 
-const ALLOWED_EXTS = ['.txt', '.json', '.csv'];
+const ALLOWED_EXTS = [
+  '.txt', '.json', '.csv', '.env', '.log', '.yaml', '.yml',
+  '.ini', '.cfg', '.conf', '.xml', '.md',
+  '.js', '.ts', '.py', '.java', '.go', '.sh', '.sql'
+];
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 
 export function NewScanPage({ user, onNavigate }) {
@@ -198,7 +202,7 @@ export function NewScanPage({ user, onNavigate }) {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".txt,.json,.csv"
+                accept=".txt,.json,.csv,.env,.log,.yaml,.yml,.ini,.cfg,.conf,.xml,.md,.js,.ts,.py,.java,.go,.sh,.sql"
                 onChange={handleFileChange}
                 style={{ display: 'none' }}
               />
@@ -213,7 +217,7 @@ export function NewScanPage({ user, onNavigate }) {
                 {selectedFile ? selectedFile.name : 'Click to select or drag and drop a file'}
               </h4>
               <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                Supported formats: <strong>.txt</strong> (Plain text), <strong>.json</strong> (JSON structures), <strong>.csv</strong> (Spreadsheet exports)
+                Supported formats: <strong>.txt, .json, .csv, .env, .log, .yaml, .ini, .xml, .md</strong>, and source code files
               </p>
             </div>
 

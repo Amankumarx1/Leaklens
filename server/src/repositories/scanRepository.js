@@ -84,16 +84,19 @@ export async function createFindingsBatch(file_id, findings = []) {
       file_id,
       rule_id: finding.rule_id,
       location_reference: finding.location_reference,
+      field_path: finding.field_path || null,
       masked_excerpt: finding.masked_excerpt,
+      secret_fingerprint: finding.secret_fingerprint || null,
       severity: finding.severity,
+      confidence: finding.confidence || 'high',
       status: finding.status || 'detected',
       detected_at: now
     };
 
     if (dbHealth.isHealthy) {
       await executeQuery(
-        `INSERT INTO leaklens.findings (finding_id, file_id, rule_id, location_reference, masked_excerpt, severity, status, detected_at)
-         VALUES (@finding_id, @file_id, @rule_id, @location_reference, @masked_excerpt, @severity, @status, @detected_at)`,
+        `INSERT INTO leaklens.findings (finding_id, file_id, rule_id, location_reference, field_path, masked_excerpt, secret_fingerprint, severity, confidence, status, detected_at)
+         VALUES (@finding_id, @file_id, @rule_id, @location_reference, @field_path, @masked_excerpt, @secret_fingerprint, @severity, @confidence, @status, @detected_at)`,
         findingRecord
       );
     } else {

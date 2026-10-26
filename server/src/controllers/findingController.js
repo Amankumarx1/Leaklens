@@ -5,10 +5,11 @@ export async function getFindings(req, res) {
   const limit = Math.min(parseInt(req.query.limit || '50', 10), 100);
   const offset = Math.max(parseInt(req.query.offset || '0', 10), 0);
 
-  const { severity, category, status, scanId } = req.query;
+  const { severity, confidence, category, status, scanId } = req.query;
 
   const result = await findingRepository.listFindings({
     severity,
+    confidence,
     category,
     status,
     scanId,

@@ -4,6 +4,7 @@ import memoryStore from './memoryStore.js';
 
 export async function listFindings({
   severity,
+  confidence,
   category,
   status,
   scanId,
@@ -18,6 +19,10 @@ export async function listFindings({
     if (severity) {
       conditions.push('f.severity = @severity');
       params.severity = severity;
+    }
+    if (confidence) {
+      conditions.push('f.confidence = @confidence');
+      params.confidence = confidence;
     }
     if (category) {
       conditions.push('dr.category = @category');
@@ -42,8 +47,10 @@ export async function listFindings({
         dr.rule_name,
         dr.category,
         f.location_reference,
+        f.field_path,
         f.masked_excerpt,
         f.severity,
+        COALESCE(f.confidence, 'high') AS confidence,
         f.status,
         f.detected_at,
         fl.original_filename,
@@ -83,6 +90,9 @@ export async function listFindings({
   if (severity) {
     filtered = filtered.filter(f => f.severity.toLowerCase() === severity.toLowerCase());
   }
+  if (confidence) {
+    filtered = filtered.filter(f => (f.confidence || 'high').toLowerCase() === confidence.toLowerCase());
+  }
   if (category) {
     filtered = filtered.filter(f => f.category === category);
   }
@@ -105,6 +115,7 @@ export async function listFindings({
       const rule = memoryStore.detection_rules.find(r => r.rule_id === f.rule_id);
       return {
         ...f,
+        confidence: f.confidence || 'high',
         original_filename: file?.original_filename || 'unknown_file',
         scan_id: file?.scan_id || '',
         rule_name: rule?.rule_name || f.rule_name || 'RULE',
@@ -132,8 +143,11 @@ export async function getFindingById(finding_id) {
         dr.category,
         dr.description AS rule_description,
         f.location_reference,
+        f.field_path,
         f.masked_excerpt,
+        f.secret_fingerprint,
         f.severity,
+        COALESCE(f.confidence, 'high') AS confidence,
         f.status,
         f.detected_at,
         fl.original_filename,

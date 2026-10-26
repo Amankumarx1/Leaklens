@@ -28,6 +28,9 @@ export function FindingDetailModal({ finding, onClose, onEscalate }) {
             <StatusBadge type={finding.severity === 'critical' ? 'danger' : finding.severity === 'high' ? 'warning' : 'info'}>
               {finding.severity?.toUpperCase()}
             </StatusBadge>
+            <StatusBadge type={finding.confidence === 'high' ? 'healthy' : finding.confidence === 'medium' ? 'warning' : 'neutral'}>
+              CONF: {(finding.confidence || 'high').toUpperCase()}
+            </StatusBadge>
           </div>
           <button
             onClick={onClose}
@@ -39,15 +42,25 @@ export function FindingDetailModal({ finding, onClose, onEscalate }) {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '13px' }}>
-          <div>
-            <div style={{ color: 'var(--text-muted)', fontSize: '11px', textTransform: 'uppercase' }}>FINDING IDENTIFIER</div>
-            <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-cyan)' }}>{finding.finding_id}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div>
+              <div style={{ color: 'var(--text-muted)', fontSize: '11px', textTransform: 'uppercase' }}>FINDING IDENTIFIER</div>
+              <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-cyan)', fontSize: '12px' }}>{finding.finding_id}</div>
+            </div>
+            <div>
+              <div style={{ color: 'var(--text-muted)', fontSize: '11px', textTransform: 'uppercase' }}>DETECTION CATEGORY</div>
+              <div style={{ fontWeight: '600' }}>{finding.category}</div>
+            </div>
           </div>
 
-          <div>
-            <div style={{ color: 'var(--text-muted)', fontSize: '11px', textTransform: 'uppercase' }}>DETECTION CATEGORY</div>
-            <div style={{ fontWeight: '600' }}>{finding.category}</div>
-          </div>
+          {finding.field_path && (
+            <div>
+              <div style={{ color: 'var(--text-muted)', fontSize: '11px', textTransform: 'uppercase' }}>STRUCTURED FIELD PATH</div>
+              <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-cyan)', fontSize: '12px' }}>
+                <code>{finding.field_path}</code>
+              </div>
+            </div>
+          )}
 
           <div>
             <div style={{ color: 'var(--text-muted)', fontSize: '11px', textTransform: 'uppercase' }}>MASKED EXCERPT (DEFENSIVE REDACTION)</div>
@@ -65,6 +78,15 @@ export function FindingDetailModal({ finding, onClose, onEscalate }) {
               Note: Plaintext secrets are strictly excluded from relational persistence and API responses.
             </p>
           </div>
+
+          {finding.secret_fingerprint && (
+            <div>
+              <div style={{ color: 'var(--text-muted)', fontSize: '11px', textTransform: 'uppercase' }}>HMAC-SHA256 FINGERPRINT (SALTED)</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-secondary)' }}>
+                {finding.secret_fingerprint.slice(0, 32)}...
+              </div>
+            </div>
+          )}
 
           <div>
             <div style={{ color: 'var(--text-muted)', fontSize: '11px', textTransform: 'uppercase' }}>LOCATION REFERENCE</div>

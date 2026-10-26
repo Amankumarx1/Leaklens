@@ -36,6 +36,11 @@ export function SettingsPage({ health, user, onNavigate }) {
   const detectionRules = [
     { id: 'RULE-EMAIL', name: 'RFC Email Address Pattern', category: 'EMAIL_ADDRESS', regex: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, severity: 'low', status: 'Enabled' },
     { id: 'RULE-API', name: 'Candidate API Key / Secret Token', category: 'API_KEY_CANDIDATE', regex: /\b(?:key_live_|key_test_|sk_live_|sk_test_|sk_demo_|api_key_|ghp_|gho_)[0-9a-zA-Z]{12,64}\b/g, severity: 'high', status: 'Enabled' },
+    { id: 'RULE-AWS', name: 'AWS Access Key Identifier', category: 'CLOUD_CREDENTIAL', regex: new RegExp('\\bAKIA' + '[0-9A-Z]{16}\\b', 'g'), severity: 'critical', status: 'Enabled' },
+    { id: 'RULE-STRIPE', name: 'Stripe Live Secret Key', category: 'CLOUD_CREDENTIAL', regex: /\b[sr]k_live_[0-9a-zA-Z]{24,}\b/g, severity: 'critical', status: 'Enabled' },
+    { id: 'RULE-DB', name: 'Database Connection URI with Credentials', category: 'DATABASE_CONNECTION_STRING', regex: /\b(?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|mssql|redis):\/\/[a-zA-Z0-9._%+-]+:[^\s@]+@[a-zA-Z0-9.-]+/gi, severity: 'critical', status: 'Enabled' },
+    { id: 'RULE-PAN', name: 'Indian Permanent Account Number (PAN)', category: 'PERSONAL_IDENTIFIER', regex: /\b[A-Z]{5}[0-9]{4}[A-Z]\b/g, severity: 'high', status: 'Enabled' },
+    { id: 'RULE-CARD', name: 'Payment Card Candidate (Luhn Validated)', category: 'FINANCIAL_IDENTIFIER', regex: /\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13})\b/g, severity: 'critical', status: 'Enabled' },
     { id: 'RULE-PEM', name: 'Cryptographic Private Key Marker', category: 'PRIVATE_KEY_MARKER', regex: /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/g, severity: 'critical', status: 'Enabled' },
     { id: 'RULE-ID', name: 'Sensitive Enterprise Identifier', category: 'SENSITIVE_IDENTIFIER', regex: /\bLL-ID-[A-Z0-9]{4}-[A-Z0-9]{4}\b/g, severity: 'medium', status: 'Enabled' }
   ];
