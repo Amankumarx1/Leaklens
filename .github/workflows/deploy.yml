@@ -20,15 +20,18 @@ jobs:
     name: Build & Deploy to Azure
     runs-on: ubuntu-latest
     if: github.repository == 'Amankumarx1/Leaklens'
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_APP_URL: ${{ secrets.AZURE_APP_URL }}
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 20 LTS
+      - name: Setup Node.js 22 LTS
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Install Dependencies

@@ -15,20 +15,17 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 20 LTS
+      - name: Setup Node.js 22 LTS
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
-      - name: Install Root Dependencies
-        run: npm ci
-
-      - name: Install Server Dependencies
-        run: npm --prefix server ci
-
-      - name: Install Client Dependencies
-        run: npm --prefix client ci
+      - name: Install Dependencies
+        run: |
+          npm ci
+          npm --prefix server ci
+          npm --prefix client ci
 
       - name: Lint Frontend (Oxlint)
         run: npm run lint:client
