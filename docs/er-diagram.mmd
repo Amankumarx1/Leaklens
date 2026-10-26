@@ -74,8 +74,10 @@ erDiagram
         nvarchar description
         nvarchar status
         nvarchar priority
+        int version
         uniqueidentifier assigned_to FK
         uniqueidentifier created_by FK
+        nvarchar resolution_summary
         datetimeoffset created_at
         datetimeoffset updated_at
         datetimeoffset resolved_at

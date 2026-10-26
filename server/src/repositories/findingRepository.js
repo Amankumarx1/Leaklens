@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { executeQuery, checkDatabaseHealth } from '../database/connection.js';
 import memoryStore from './memoryStore.js';
 
@@ -11,27 +12,27 @@ export async function listFindings({
 } = {}) {
   const dbHealth = await checkDatabaseHealth();
   if (dbHealth.isHealthy) {
-    const whereClauses = [];
+    const conditions = [];
     const params = { limit, offset };
 
     if (severity) {
-      whereClauses.push('f.severity = @severity');
-      params.severity = severity.toLowerCase();
+      conditions.push('f.severity = @severity');
+      params.severity = severity;
     }
     if (category) {
-      whereClauses.push('dr.category = @category');
+      conditions.push('dr.category = @category');
       params.category = category;
     }
     if (status) {
-      whereClauses.push('f.status = @status');
+      conditions.push('f.status = @status');
       params.status = status;
     }
     if (scanId) {
-      whereClauses.push('fl.scan_id = @scanId');
+      conditions.push('fl.scan_id = @scanId');
       params.scanId = scanId;
     }
 
-    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+    const whereSql = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const query = `
       SELECT 
@@ -144,7 +145,7 @@ export async function getFindingById(finding_id) {
       WHERE f.finding_id = @finding_id`,
       { finding_id }
     );
-    return result.recordset && result.recordset.length > 0 ? result.recordset[0] : null;
+    return result.recordset?.[0] || null;
   }
 
   const f = memoryStore.findings.find(item => item.finding_id === finding_id);
@@ -167,8 +168,18 @@ export async function getFindingById(finding_id) {
 export async function getDashboardMetrics() {
   const dbHealth = await checkDatabaseHealth();
   if (dbHealth.isHealthy) {
-    const [scansRes, findingsRes, sevRes, catRes] = await Promise.all([
-      executeQuery(`SELECT COUNT(*) AS total_scans FROM leaklens.scan_jobs WHERE status = 'completed'`),
+    const [
+      scansRes,
+      findingsRes,
+      sevRes,
+      catRes,
+      findingStatusRes,
+      incidentsRes,
+      incPriorityRes,
+      rulesRes,
+      mttrRes
+    ] = await Promise.all([
+      executeQuery(`SELECT status, COUNT(*) AS count FROM leaklens.scan_jobs GROUP BY status`),
       executeQuery(`SELECT COUNT(*) AS total_findings FROM leaklens.findings`),
       executeQuery(`SELECT severity, COUNT(*) AS count FROM leaklens.findings GROUP BY severity`),
       executeQuery(`
@@ -176,12 +187,46 @@ export async function getDashboardMetrics() {
         FROM leaklens.findings f 
         INNER JOIN leaklens.detection_rules dr ON f.rule_id = dr.rule_id 
         GROUP BY dr.category
+      `),
+      executeQuery(`SELECT status, COUNT(*) AS count FROM leaklens.findings GROUP BY status`),
+      executeQuery(`
+        SELECT 
+          COUNT(*) AS total_incidents,
+          SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) AS open_count,
+          SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress_count,
+          SUM(CASE WHEN status = 'pending_verification' THEN 1 ELSE 0 END) AS pending_verification_count,
+          SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) AS resolved_count,
+          SUM(CASE WHEN status = 'closed' THEN 1 ELSE 0 END) AS closed_count,
+          SUM(CASE WHEN assigned_to IS NULL THEN 1 ELSE 0 END) AS unassigned_count
+        FROM leaklens.incidents
+      `),
+      executeQuery(`SELECT priority, COUNT(*) AS count FROM leaklens.incidents GROUP BY priority`),
+      executeQuery(`
+        SELECT dr.rule_id, dr.rule_name, dr.category, dr.severity, COUNT(f.finding_id) AS match_count
+        FROM leaklens.detection_rules dr
+        LEFT JOIN leaklens.findings f ON dr.rule_id = f.rule_id
+        GROUP BY dr.rule_id, dr.rule_name, dr.category, dr.severity
+      `),
+      executeQuery(`
+        SELECT 
+          COUNT(incident_id) AS resolved_count,
+          AVG(DATEDIFF(SECOND, created_at, resolved_at) / 3600.0) AS avg_hours,
+          AVG(DATEDIFF(MINUTE, created_at, resolved_at)) AS avg_minutes
+        FROM leaklens.incidents
+        WHERE status IN ('resolved', 'closed') AND resolved_at IS NOT NULL
       `)
     ]);
 
+    const scansMap = { total: 0, completed: 0, failed: 0, in_progress: 0, queued: 0 };
+    (scansRes.recordset || []).forEach(row => {
+      const s = row.status?.toLowerCase() || 'other';
+      scansMap[s] = row.count;
+      scansMap.total += row.count;
+    });
+
     const severityMap = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
     (sevRes.recordset || []).forEach(row => {
-      severityMap[row.severity.toLowerCase()] = row.count;
+      severityMap[row.severity?.toLowerCase() || 'low'] = row.count;
     });
 
     const categoryMap = {};
@@ -189,20 +234,58 @@ export async function getDashboardMetrics() {
       categoryMap[row.category] = row.count;
     });
 
+    const findingStatusMap = { detected: 0, confirmed: 0, remediated: 0, suppressed: 0 };
+    (findingStatusRes.recordset || []).forEach(row => {
+      findingStatusMap[row.status?.toLowerCase() || 'detected'] = row.count;
+    });
+
+    const incSummary = incidentsRes.recordset?.[0] || {};
+    const incPriorityMap = { critical: 0, high: 0, medium: 0, low: 0 };
+    (incPriorityRes.recordset || []).forEach(row => {
+      incPriorityMap[row.priority?.toLowerCase() || 'medium'] = row.count;
+    });
+
+    const mttrData = mttrRes.recordset?.[0] || {};
+
     return {
-      totalCompletedScans: scansRes.recordset?.[0]?.total_scans || 0,
+      totalCompletedScans: scansMap.completed || 0,
       totalFindings: findingsRes.recordset?.[0]?.total_findings || 0,
       findingsBySeverity: severityMap,
-      findingsByCategory: categoryMap
+      findingsByCategory: categoryMap,
+      scans: scansMap,
+      findingsByStatus: findingStatusMap,
+      incidents: {
+        total: incSummary.total_incidents || 0,
+        open: incSummary.open_count || 0,
+        in_progress: incSummary.in_progress_count || 0,
+        pending_verification: incSummary.pending_verification_count || 0,
+        resolved: incSummary.resolved_count || 0,
+        closed: incSummary.closed_count || 0,
+        unassigned: incSummary.unassigned_count || 0,
+        byPriority: incPriorityMap
+      },
+      mttr: {
+        avgHours: mttrData.avg_hours ? Number(mttrData.avg_hours.toFixed(2)) : 0,
+        avgMinutes: mttrData.avg_minutes ? Math.round(mttrData.avg_minutes) : 0,
+        resolvedCases: mttrData.resolved_count || 0
+      },
+      rules: rulesRes.recordset || []
     };
   }
 
   // Memory fallback
-  const totalCompletedScans = memoryStore.scan_jobs.filter(s => s.status === 'completed').length;
+  const scansMap = { total: memoryStore.scan_jobs.length, completed: 0, failed: 0, in_progress: 0, queued: 0 };
+  memoryStore.scan_jobs.forEach(s => {
+    const st = s.status?.toLowerCase() || 'other';
+    scansMap[st] = (scansMap[st] || 0) + 1;
+  });
+
+  const totalCompletedScans = scansMap.completed || 0;
   const totalFindings = memoryStore.findings.length;
 
   const findingsBySeverity = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
   const findingsByCategory = {};
+  const findingsByStatus = { detected: 0, confirmed: 0, remediated: 0, suppressed: 0 };
 
   memoryStore.findings.forEach(f => {
     const sev = (f.severity || 'low').toLowerCase();
@@ -210,13 +293,73 @@ export async function getDashboardMetrics() {
 
     const cat = f.category || 'OTHER';
     findingsByCategory[cat] = (findingsByCategory[cat] || 0) + 1;
+
+    const st = (f.status || 'detected').toLowerCase();
+    findingsByStatus[st] = (findingsByStatus[st] || 0) + 1;
+  });
+
+  const incSummary = {
+    total: memoryStore.incidents.length,
+    open: 0,
+    in_progress: 0,
+    pending_verification: 0,
+    resolved: 0,
+    closed: 0,
+    unassigned: 0,
+    byPriority: { critical: 0, high: 0, medium: 0, low: 0 }
+  };
+
+  let totalDurationMinutes = 0;
+  let resolvedCount = 0;
+
+  memoryStore.incidents.forEach(inc => {
+    const st = (inc.status || 'open').toLowerCase();
+    incSummary[st] = (incSummary[st] || 0) + 1;
+
+    if (!inc.assigned_to) {
+      incSummary.unassigned++;
+    }
+
+    const pr = (inc.priority || 'medium').toLowerCase();
+    incSummary.byPriority[pr] = (incSummary.byPriority[pr] || 0) + 1;
+
+    if (['resolved', 'closed'].includes(st) && inc.resolved_at && inc.created_at) {
+      const durMin = (new Date(inc.resolved_at) - new Date(inc.created_at)) / (1000 * 60);
+      if (durMin >= 0) {
+        totalDurationMinutes += durMin;
+        resolvedCount++;
+      }
+    }
+  });
+
+  const avgMinutes = resolvedCount > 0 ? Math.round(totalDurationMinutes / resolvedCount) : 0;
+  const avgHours = resolvedCount > 0 ? Number((avgMinutes / 60).toFixed(2)) : 0;
+
+  const rules = memoryStore.detection_rules.map(dr => {
+    const matchCount = memoryStore.findings.filter(f => f.rule_id === dr.rule_id).length;
+    return {
+      rule_id: dr.rule_id,
+      rule_name: dr.rule_name,
+      category: dr.category,
+      severity: dr.severity,
+      match_count: matchCount
+    };
   });
 
   return {
     totalCompletedScans,
     totalFindings,
     findingsBySeverity,
-    findingsByCategory
+    findingsByCategory,
+    scans: scansMap,
+    findingsByStatus,
+    incidents: incSummary,
+    mttr: {
+      avgHours,
+      avgMinutes,
+      resolvedCases: resolvedCount
+    },
+    rules
   };
 }
 

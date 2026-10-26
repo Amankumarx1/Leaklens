@@ -1,0 +1,92 @@
+flowchart TD
+    subgraph INGESTION["1. File Ingestion & Validation"]
+        User["Security Analyst / Pipeline"]
+        UploadReq["POST /api/scans\n(Multer Memory Storage)"]
+        Validation{"Validation:\n- Allowed Extension?\n- Size <= 10MB?\n- Non-empty Buffer?"}
+        Reject["HTTP 400 Bad Request\n(EMPTY_FILE / INVALID_TYPE)"]
+        HashCompute["Compute SHA-256 Content Hash\nGenerate scan_id & file_id UUIDs"]
+    end
+
+    subgraph STORAGE_AND_SCAN["2. Private Storage & Pattern Detection"]
+        BlobStore["Private Azure Blob Storage\nContainer: leaklens-scans\nPath: scans/{scanId}/{fileId}.bin"]
+        Parser["Parser Factory:\n- textParser\n- jsonParser\n- csvParser"]
+        Rules["Load Active Detection Rules\n(AWS, GitHub, Generic API, Connection Strings)"]
+        Scanner["Detection Engine:\nRegex Pattern Matching & Item Extraction"]
+        Masking["In-Memory Masking Service:\n- maskSecret(ghp_***_890)\n- maskApiKey(AKIA***SAMPLE)"]
+    end
+
+    subgraph PERSISTENCE["3. Relational Persistence & Failure Handling"]
+        Compensate{"Processing\nSuccessful?"}
+        DeleteBlob["Compensating Action:\ndeleteBlob(blobPath)\n(Prevent Orphaned Blobs)"]
+        FailState["Update scan_jobs status = 'failed'\nAudit Event = 'scan_failed'"]
+        SQL_Scan["INSERT leaklens.scan_jobs (status = 'completed')"]
+        SQL_File["INSERT leaklens.files (with blob_path & content_hash)"]
+        SQL_Findings["INSERT leaklens.findings (masked_excerpt ONLY)"]
+        SQL_Audit1["INSERT leaklens.audit_logs (event = 'scan_completed')"]
+    end
+
+    subgraph INCIDENT_RESPONSE["4. Incident Management & Remediation"]
+        Triage["Analyst Reviews Findings Register\nGET /api/findings"]
+        Escalate["POST /api/incidents\n(Escalate Finding to Incident)"]
+        Assign["PATCH /api/incidents/:id/assignment\n(Assign Lead Analyst)"]
+        Investigate["POST /api/incidents/:id/actions\n(Record Key Rotation Notes)"]
+        Verify["POST /api/incidents/:id/verify\n(Independent Verification Check)"]
+        Resolve["POST /api/incidents/:id/resolve\n(Atomic Stored Procedure)"]
+    end
+
+    subgraph ATOMIC_RESOLUTION["5. Atomic Transaction (sp_resolve_incident)"]
+        TX_Start["BEGIN TRANSACTION"]
+        TX_Inc["UPDATE incidents SET status = 'resolved', resolved_at = UTC NOW"]
+        TX_Find["UPDATE findings SET status = 'remediated' WHERE finding_id IN (...)"]
+        TX_Act["INSERT remediation_actions (action_type = 'RESOLUTION')"]
+        TX_Audit["INSERT audit_logs (event_type = 'INCIDENT_RESOLVED')"]
+        TX_Commit["COMMIT TRANSACTION"]
+    end
+
+    subgraph ANALYTICS_REPORTING["6. DP-900 Analytics & Power BI"]
+        Views["Relational Analytics Views:\n- vw_exposure_analytics\n- vw_incident_analytics\n- vw_operational_metrics"]
+        PowerBI["Power BI DirectQuery / Dashboard:\n- Executive Scorecards\n- Detection Trends\n- Incident MTTR Metrics\n- Data Quality & Pipeline Health"]
+    end
+
+    %% Ingestion flow
+    User -->|Submits authorized file| UploadReq
+    UploadReq --> Validation
+    Validation -->|Failed| Reject
+    Validation -->|Passed| HashCompute
+
+    %% Storage and Scan flow
+    HashCompute --> BlobStore
+    BlobStore --> Parser
+    Parser --> Scanner
+    Rules --> Scanner
+    Scanner --> Masking
+
+    %% Persistence flow
+    Masking --> Compensate
+    Compensate -->|Downstream Error| DeleteBlob
+    DeleteBlob --> FailState
+    Compensate -->|Success| SQL_Scan
+    SQL_Scan --> SQL_File
+    SQL_File --> SQL_Findings
+    SQL_Findings --> SQL_Audit1
+
+    %% Incident Response flow
+    SQL_Findings --> Triage
+    Triage --> Escalate
+    Escalate --> Assign
+    Assign --> Investigate
+    Investigate --> Verify
+    Verify --> Resolve
+
+    %% Atomic Resolution flow
+    Resolve --> TX_Start
+    TX_Start --> TX_Inc
+    TX_Inc --> TX_Find
+    TX_Find --> TX_Act
+    TX_Act --> TX_Audit
+    TX_Audit --> TX_Commit
+
+    %% Analytics flow
+    TX_Commit --> Views
+    SQL_Scan --> Views
+    Views --> PowerBI

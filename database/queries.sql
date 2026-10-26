@@ -1,7 +1,7 @@
 -- ==============================================================================
--- LeakLens — Representative Analytical & Operational Queries
+-- LeakLens — Comprehensive Analytical & Operational SQL Queries
 -- Microsoft SQL Server / Azure SQL Database
--- Designed with Parameterized Inputs, Index Optimization & Execution Plan Notes
+-- Designed for DP-900 Data Services, Power BI DirectQuery, and RDBMS Validation
 -- ==============================================================================
 
 -- ==============================================================================
@@ -18,6 +18,7 @@ SELECT
     u.email AS initiated_by_email,
     fl.file_id,
     fl.original_filename,
+    fl.blob_path,
     fl.content_hash,
     fl.file_size_bytes,
     f.finding_id,
@@ -86,7 +87,7 @@ FETCH NEXT @PageLimit ROWS ONLY;
 -- Performance: Uses filtered index IX_incidents_assigned_to and IX_incidents_status_priority.
 -- ==============================================================================
 DECLARE @AnalystUserId UNIQUEIDENTIFIER = '00000000-0000-0000-0000-000000000002';
-DECLARE @IncidentStatus NVARCHAR(32) = 'under_investigation';
+DECLARE @IncidentStatus NVARCHAR(32) = 'in_progress';
 
 SELECT 
     inc.incident_id,
@@ -179,3 +180,111 @@ ORDER BY
         WHEN 'low' THEN 4
         ELSE 5
     END ASC;
+
+-- ==============================================================================
+-- QUERY 6: Mean Time to Remediate (MTTR) Analysis by Priority Tier
+-- Use Case: SLA compliance tracking and SOC response duration metrics.
+-- ==============================================================================
+SELECT 
+    priority,
+    COUNT(incident_id) AS total_resolved_cases,
+    AVG(DATEDIFF(MINUTE, created_at, resolved_at)) AS avg_resolution_minutes,
+    AVG(DATEDIFF(SECOND, created_at, resolved_at) / 3600.0) AS avg_resolution_hours,
+    MIN(DATEDIFF(MINUTE, created_at, resolved_at)) AS min_resolution_minutes,
+    MAX(DATEDIFF(MINUTE, created_at, resolved_at)) AS max_resolution_minutes
+FROM leaklens.incidents
+WHERE status IN ('resolved', 'closed')
+  AND resolved_at IS NOT NULL
+GROUP BY priority
+ORDER BY 
+    CASE priority
+        WHEN 'critical' THEN 1
+        WHEN 'high' THEN 2
+        WHEN 'medium' THEN 3
+        ELSE 4
+    END ASC;
+
+-- ==============================================================================
+-- QUERY 7: Temporal Detection Trends (Daily Aggregations)
+-- Use Case: Trend line chart for Power BI Page 1 (Executive Overview).
+-- ==============================================================================
+SELECT 
+    CAST(f.detected_at AS DATE) AS detection_date,
+    dr.category,
+    COUNT(f.finding_id) AS total_detections,
+    SUM(CASE WHEN f.severity = 'critical' THEN 1 ELSE 0 END) AS critical_count,
+    SUM(CASE WHEN f.severity = 'high' THEN 1 ELSE 0 END) AS high_count,
+    SUM(CASE WHEN f.severity = 'medium' THEN 1 ELSE 0 END) AS medium_count,
+    SUM(CASE WHEN f.severity = 'low' THEN 1 ELSE 0 END) AS low_count
+FROM leaklens.findings f
+INNER JOIN leaklens.detection_rules dr 
+    ON f.rule_id = dr.rule_id
+GROUP BY 
+    CAST(f.detected_at AS DATE),
+    dr.category
+ORDER BY 
+    detection_date DESC,
+    dr.category ASC;
+
+-- ==============================================================================
+-- QUERY 8: Power BI Page 2 (Detection Analysis) - Rule-Level Effectiveness
+-- Use Case: Evaluates detection rule match frequencies vs false-positive suppressions.
+-- ==============================================================================
+SELECT 
+    dr.rule_name,
+    dr.category,
+    dr.severity,
+    COUNT(f.finding_id) AS total_matches,
+    SUM(CASE WHEN f.status = 'confirmed' THEN 1 ELSE 0 END) AS confirmed_exposures,
+    SUM(CASE WHEN f.status = 'remediated' THEN 1 ELSE 0 END) AS remediated_exposures,
+    SUM(CASE WHEN f.status = 'suppressed' THEN 1 ELSE 0 END) AS suppressed_false_positives,
+    CASE 
+        WHEN COUNT(f.finding_id) > 0 
+        THEN (CAST(SUM(CASE WHEN f.status = 'remediated' THEN 1 ELSE 0 END) AS FLOAT) / COUNT(f.finding_id)) * 100.0 
+        ELSE 0 
+    END AS remediation_rate_pct
+FROM leaklens.detection_rules dr
+LEFT JOIN leaklens.findings f 
+    ON dr.rule_id = f.rule_id
+GROUP BY 
+    dr.rule_name,
+    dr.category,
+    dr.severity
+ORDER BY total_matches DESC;
+
+-- ==============================================================================
+-- QUERY 9: Power BI Page 3 (Incident Response) - Analyst Caseload & Open Tickets
+-- Use Case: Workload distribution and unassigned incident identification.
+-- ==============================================================================
+SELECT 
+    ISNULL(u.display_name, '[UNASSIGNED]') AS analyst_name,
+    COUNT(inc.incident_id) AS total_assigned_cases,
+    SUM(CASE WHEN inc.status = 'open' THEN 1 ELSE 0 END) AS open_cases,
+    SUM(CASE WHEN inc.status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress_cases,
+    SUM(CASE WHEN inc.status = 'pending_verification' THEN 1 ELSE 0 END) AS pending_verification_cases,
+    SUM(CASE WHEN inc.status = 'resolved' THEN 1 ELSE 0 END) AS resolved_cases,
+    SUM(CASE WHEN inc.priority = 'critical' AND inc.status NOT IN ('resolved', 'closed') THEN 1 ELSE 0 END) AS active_critical_cases
+FROM leaklens.incidents inc
+LEFT JOIN leaklens.users u 
+    ON inc.assigned_to = u.user_id
+GROUP BY u.display_name
+ORDER BY active_critical_cases DESC, total_assigned_cases DESC;
+
+-- ==============================================================================
+-- QUERY 10: Power BI Page 4 (Data Quality & Operational Health)
+-- Use Case: Evaluates pipeline success rates, error frequencies, and scanned volume.
+-- ==============================================================================
+SELECT 
+    sj.status AS pipeline_status,
+    COUNT(sj.scan_id) AS total_scans,
+    COUNT(DISTINCT fl.file_id) AS total_files,
+    SUM(fl.file_size_bytes) / 1048576.0 AS total_volume_mb,
+    AVG(DATEDIFF(MILLISECOND, sj.started_at, sj.completed_at)) / 1000.0 AS avg_scan_duration_sec,
+    sj.error_code
+FROM leaklens.scan_jobs sj
+LEFT JOIN leaklens.files fl 
+    ON sj.scan_id = fl.scan_id
+GROUP BY 
+    sj.status,
+    sj.error_code
+ORDER BY total_scans DESC;
