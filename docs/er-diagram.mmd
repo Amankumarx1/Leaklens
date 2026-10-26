@@ -1,0 +1,107 @@
+erDiagram
+    users ||--o{ scan_jobs : "creates"
+    users ||--o{ incidents : "creates"
+    users ||--o{ incidents : "assigned_to"
+    users ||--o{ remediation_actions : "executes"
+    users ||--o{ audit_logs : "triggers"
+
+    scan_jobs ||--o{ files : "contains"
+    files ||--o{ findings : "contains"
+    detection_rules ||--o{ findings : "matches"
+
+    incidents ||--o{ incident_findings : "groups"
+    findings ||--o{ incident_findings : "linked_to"
+
+    incidents ||--o{ remediation_actions : "remediated_by"
+
+    users {
+        uniqueidentifier user_id PK
+        nvarchar display_name
+        nvarchar email UK
+        nvarchar password_hash
+        nvarchar role
+        bit is_active
+        datetimeoffset created_at
+        datetimeoffset updated_at
+    }
+
+    scan_jobs {
+        uniqueidentifier scan_id PK
+        uniqueidentifier created_by FK
+        nvarchar status
+        datetimeoffset started_at
+        datetimeoffset completed_at
+        nvarchar error_code
+        datetimeoffset created_at
+    }
+
+    files {
+        uniqueidentifier file_id PK
+        uniqueidentifier scan_id FK
+        nvarchar original_filename
+        nvarchar blob_path
+        char content_hash
+        bigint file_size_bytes
+        nvarchar mime_type
+        datetimeoffset created_at
+    }
+
+    detection_rules {
+        uniqueidentifier rule_id PK
+        nvarchar rule_name UK
+        nvarchar category
+        nvarchar description
+        nvarchar severity
+        bit is_enabled
+        datetimeoffset created_at
+        datetimeoffset updated_at
+    }
+
+    findings {
+        uniqueidentifier finding_id PK
+        uniqueidentifier file_id FK
+        uniqueidentifier rule_id FK
+        nvarchar location_reference
+        nvarchar masked_excerpt
+        nvarchar severity
+        nvarchar status
+        datetimeoffset detected_at
+    }
+
+    incidents {
+        uniqueidentifier incident_id PK
+        nvarchar title
+        nvarchar description
+        nvarchar status
+        nvarchar priority
+        uniqueidentifier assigned_to FK
+        uniqueidentifier created_by FK
+        datetimeoffset created_at
+        datetimeoffset updated_at
+        datetimeoffset resolved_at
+    }
+
+    incident_findings {
+        uniqueidentifier incident_id PK_FK
+        uniqueidentifier finding_id PK_FK
+        datetimeoffset linked_at
+    }
+
+    remediation_actions {
+        uniqueidentifier action_id PK
+        uniqueidentifier incident_id FK
+        uniqueidentifier user_id FK
+        nvarchar action_type
+        nvarchar notes
+        datetimeoffset created_at
+    }
+
+    audit_logs {
+        uniqueidentifier audit_id PK
+        uniqueidentifier user_id FK
+        nvarchar event_type
+        nvarchar entity_type
+        nvarchar entity_id
+        nvarchar metadata_json
+        datetimeoffset created_at
+    }

@@ -1,0 +1,29 @@
+{
+  "name": "leaklens-root",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LeakLens — Authorized Data Exposure Detection & Response",
+  "type": "module",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "npm --prefix server run dev",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "build:client": "npm --prefix client run build",
+    "test": "npm --prefix server run test",
+    "test:server": "npm --prefix server run test",
+    "lint:client": "npm --prefix client run lint"
+  },
+  "keywords": [
+    "cybersecurity",
+    "dlp",
+    "data-exposure",
+    "secret-detection",
+    "audit-trail"
+  ],
+  "author": "Amankumarx1",
+  "license": "UNLICENSED"
+}
