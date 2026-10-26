@@ -6,6 +6,7 @@ import findingRoutes from './finding.routes.js';
 import analyticsRoutes from './analytics.routes.js';
 import auditRoutes from './audit.routes.js';
 import incidentRoutes from './incident.routes.js';
+import integrationRoutes from './integration.routes.js';
 import { successResponse } from '../utils/apiResponse.js';
 
 const apiRouter = Router();
@@ -20,6 +21,7 @@ apiRouter.use('/findings', findingRoutes);
 apiRouter.use('/incidents', incidentRoutes);
 apiRouter.use('/analytics', analyticsRoutes);
 apiRouter.use('/audit-logs', auditRoutes);
+apiRouter.use('/admin/integrations', integrationRoutes);
 
 // Phase 4+ Placeholders
 const futureModules = [

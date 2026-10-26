@@ -246,6 +246,49 @@ export async function getAuditLogs(params = {}) {
   return request(`/audit-logs${query ? `?${query}` : ''}`);
 }
 
+// -----------------------------------------------------------------------------
+// Azure Cloud Integrations (Admin Only)
+// -----------------------------------------------------------------------------
+export async function getIntegrations() {
+  return request('/admin/integrations');
+}
+
+export async function getIntegrationsStatus() {
+  return request('/admin/integrations/status');
+}
+
+export async function updateIntegrationPreferences(preferences) {
+  return request('/admin/integrations/preferences', {
+    method: 'PUT',
+    body: JSON.stringify(preferences)
+  });
+}
+
+export async function testSqlIntegration() {
+  return request('/admin/integrations/sql/test', {
+    method: 'POST'
+  });
+}
+
+export async function testBlobIntegration() {
+  return request('/admin/integrations/blob/test', {
+    method: 'POST'
+  });
+}
+
+export async function testKeyVaultIntegration() {
+  return request('/admin/integrations/key-vault/test', {
+    method: 'POST'
+  });
+}
+
+export async function testPowerBiIntegration(reportUrl = null) {
+  return request('/admin/integrations/power-bi/test', {
+    method: 'POST',
+    body: JSON.stringify({ reportUrl })
+  });
+}
+
 export default {
   login,
   logout,
@@ -275,7 +318,15 @@ export default {
   getEligibleAssignees,
   getDashboardAnalytics,
   getAuditLogs,
+  getIntegrations,
+  getIntegrationsStatus,
+  updateIntegrationPreferences,
+  testSqlIntegration,
+  testBlobIntegration,
+  testKeyVaultIntegration,
+  testPowerBiIntegration,
   setAuthToken,
   getAuthToken,
   API_BASE_URL
 };
+

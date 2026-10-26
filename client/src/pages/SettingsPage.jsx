@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import StatusBadge from '../components/StatusBadge';
 import { getHealthStatus, clearAllScanData } from '../services/api';
+import AzureIntegrationsView from '../components/integrations/AzureIntegrationsView';
 
 const DEFAULT_PREFERENCES = {
   maxUploadThresholdMb: 5,
@@ -9,7 +10,7 @@ const DEFAULT_PREFERENCES = {
 };
 
 export function SettingsPage({ health, user, onNavigate }) {
-  const [activeTab, setActiveTab] = useState('profile'); // 'profile' | 'rules' | 'diagnostics'
+  const [activeTab, setActiveTab] = useState(user?.role === 'ADMIN' ? 'integrations' : 'profile'); // 'integrations' | 'profile' | 'rules' | 'diagnostics'
   
   // Profile & Preferences state
   const [displayName, setDisplayName] = useState(user?.display_name || user?.email || '');
@@ -168,7 +169,17 @@ export function SettingsPage({ health, user, onNavigate }) {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
+      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px', flexWrap: 'wrap' }}>
+        {isAdmin && (
+          <button
+            id="tab-settings-integrations"
+            className={`btn ${activeTab === 'integrations' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setActiveTab('integrations')}
+          >
+            Azure Integrations
+          </button>
+        )}
+
         <button
           id="tab-settings-profile"
           className={`btn ${activeTab === 'profile' ? 'btn-primary' : 'btn-secondary'}`}
@@ -193,6 +204,14 @@ export function SettingsPage({ health, user, onNavigate }) {
           Diagnostics & Cloud
         </button>
       </div>
+
+      {/* TAB 0: Azure Integrations (Admin Only) */}
+      {activeTab === 'integrations' && (
+        <AzureIntegrationsView
+          user={user}
+          onNavigateToDiagnostics={() => setActiveTab('diagnostics')}
+        />
+      )}
 
       {/* TAB 1: Profile & Preferences */}
       {activeTab === 'profile' && (
