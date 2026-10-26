@@ -181,8 +181,11 @@ export function Header({ activeRouteTitle, health, loading, error, onRefresh, us
                   fontSize: '13px'
                 }}
               >
-                <div style={{ padding: '10px 18px', borderBottom: '1px solid rgba(226, 232, 240, 0.7)' }}>
-                  <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{user.display_name || 'Security Operator'}</div>
+                <div style={{ padding: '12px 18px', borderBottom: '1px solid rgba(226, 232, 240, 0.7)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                    <img src="/logo-icon.png" alt="LeakLens" style={{ width: '18px', height: '18px', objectFit: 'contain' }} />
+                    <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{user.display_name || 'Security Operator'}</div>
+                  </div>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{user.email}</div>
                   <div style={{ marginTop: '6px' }}>
                     <StatusBadge type={user.role === 'ADMIN' ? 'danger' : user.role === 'ANALYST' ? 'info' : 'warning'}>

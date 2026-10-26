@@ -120,7 +120,7 @@ export function Sidebar({ activeRoute, onNavigate, user }) {
 
   return (
     <aside className="app-sidebar">
-      {/* 3D Iridescent Orb Brand Header */}
+      {/* LeakLens Defensive Security Brand Header */}
       <button
         id="btn-sidebar-brand"
         className="sidebar-brand"
@@ -128,9 +128,15 @@ export function Sidebar({ activeRoute, onNavigate, user }) {
         title="Return to Security Dashboard"
         aria-label="LeakLens Defensive Security Dashboard"
       >
-        <div className="brand-orb" aria-hidden="true" />
+        <div className="brand-orb" aria-hidden="true">
+          <img 
+            src="/logo-icon.png" 
+            alt="LeakLens Logo" 
+            style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
+          />
+        </div>
         <div className="brand-text">
-          <h1>LeakLens</h1>
+          <h1>Leak<span style={{ color: '#ff4b55' }}>Lens</span></h1>
           <p>Defensive Security</p>
         </div>
       </button>

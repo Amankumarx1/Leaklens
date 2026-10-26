@@ -50,17 +50,22 @@ export function LoginPage({ onLoginSuccess }) {
         padding: '40px 36px',
         boxShadow: 'var(--shadow-glass-lg)'
       }}>
-        {/* Brand Header with 3D Glowing Orb */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '28px' }}>
-          <div className="brand-orb" style={{ width: '46px', height: '46px' }} aria-hidden="true" />
-          <div>
-            <h2 style={{ fontSize: '24px', fontWeight: '800', letterSpacing: '-0.03em', color: 'var(--text-primary)' }}>
-              LeakLens
-            </h2>
-            <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500 }}>
-              Authorized Exposure Detection & Response
-            </p>
-          </div>
+        {/* Brand Header with LeakLens Master Logo */}
+        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+          <img 
+            src="/logo-full.png" 
+            alt="LeakLens Defensive Security" 
+            style={{ 
+              maxWidth: '220px', 
+              width: '100%',
+              height: 'auto', 
+              marginBottom: '10px',
+              filter: 'drop-shadow(0 10px 24px rgba(0, 0, 0, 0.08))'
+            }} 
+          />
+          <p style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', margin: 0 }}>
+            Authorized Data Exposure Detection & Response
+          </p>
         </div>
 
         {error && (

@@ -539,9 +539,15 @@ export function DashboardPage({ health: _health, user, onNavigate }) {
           <div style={{ textAlign: 'center', paddingBottom: '12px', borderBottom: '1px solid rgba(226, 232, 240, 0.7)' }}>
             <div 
               className="brand-orb" 
-              style={{ width: '56px', height: '56px', margin: '0 auto 12px auto' }}
+              style={{ width: '56px', height: '56px', margin: '0 auto 12px auto', padding: '6px' }}
               aria-hidden="true" 
-            />
+            >
+              <img 
+                src="/logo-icon.png" 
+                alt="LeakLens Copilot" 
+                style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
+              />
+            </div>
             <h3 style={{ fontSize: '19px', fontWeight: '800', letterSpacing: '-0.02em', color: 'var(--text-primary)', lineHeight: 1.25 }}>
               Good Day <span style={{ color: 'var(--accent-cyan)' }}>{operatorName}</span>,<br />What's on your mind?
             </h3>
@@ -568,7 +574,10 @@ export function DashboardPage({ health: _health, user, onNavigate }) {
                   border: msg.sender === 'user' ? 'none' : '1px solid rgba(255, 255, 255, 0.9)'
                 }}
               >
-                <div style={{ fontSize: '10px', fontWeight: 700, marginBottom: '2px', opacity: 0.7, textTransform: 'uppercase' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', fontWeight: 700, marginBottom: '2px', opacity: 0.7, textTransform: 'uppercase' }}>
+                  {msg.sender === 'assistant' && (
+                    <img src="/logo-icon.png" alt="LL" style={{ width: '12px', height: '12px', objectFit: 'contain' }} />
+                  )}
                   {msg.sender === 'user' ? 'You' : 'LeakLens Copilot'}
                 </div>
                 {msg.text}
