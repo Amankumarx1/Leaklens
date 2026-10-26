@@ -30,7 +30,7 @@ BEGIN
         updated_at DATETIMEOFFSET NOT NULL CONSTRAINT DF_users_updated_at DEFAULT SYSUTCDATETIME(),
         CONSTRAINT PK_users PRIMARY KEY CLUSTERED (user_id),
         CONSTRAINT UQ_users_email UNIQUE NONCLUSTERED (email),
-        CONSTRAINT CK_users_role CHECK (role IN ('admin', 'security_analyst', 'auditor', 'viewer')),
+        CONSTRAINT CK_users_role CHECK (role IN ('ADMIN', 'ANALYST', 'COMPLIANCE_REVIEWER', 'admin', 'security_analyst', 'auditor', 'viewer')),
         CONSTRAINT CK_users_email_format CHECK (email LIKE '%_@__%.__%')
     );
 END
@@ -102,7 +102,7 @@ BEGIN
         CONSTRAINT PK_detection_rules PRIMARY KEY CLUSTERED (rule_id),
         CONSTRAINT UQ_detection_rules_rule_name UNIQUE NONCLUSTERED (rule_name),
         CONSTRAINT CK_detection_rules_severity CHECK (severity IN ('critical', 'high', 'medium', 'low', 'info')),
-        CONSTRAINT CK_detection_rules_category CHECK (category IN ('api_key', 'credentials', 'pii', 'financial', 'secret_key', 'infrastructure', 'custom'))
+        CONSTRAINT CK_detection_rules_category CHECK (category IN ('EMAIL_ADDRESS', 'API_KEY_CANDIDATE', 'PRIVATE_KEY_MARKER', 'SENSITIVE_IDENTIFIER', 'api_key', 'credentials', 'pii', 'financial', 'secret_key', 'infrastructure', 'custom'))
     );
 END
 GO

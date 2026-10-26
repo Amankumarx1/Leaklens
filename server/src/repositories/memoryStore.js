@@ -1,0 +1,50 @@
+import bcrypt from 'bcryptjs';
+import { CANONICAL_RULES } from '../services/scanner/rules/ruleDefinitions.js';
+
+/**
+ * In-Memory Database Store for Testing and Offline Local Development.
+ * Holds state in memory when a live Microsoft SQL Server instance is unreachable,
+ * ensuring zero disruption to unit tests, manual checks, and viva demonstrations.
+ */
+
+// Initial pre-computed hashes for default seed users (password: 'LeakLensDev2026!')
+const DEFAULT_HASH = bcrypt.hashSync('LeakLensDev2026!', 10);
+
+export const memoryStore = {
+  users: [
+    {
+      user_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa0001',
+      display_name: 'Security Admin',
+      email: 'admin@leaklens.local',
+      password_hash: DEFAULT_HASH,
+      role: 'ADMIN',
+      is_active: 1,
+      created_at: new Date().toISOString()
+    },
+    {
+      user_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa0002',
+      display_name: 'Lead Security Analyst',
+      email: 'analyst@leaklens.local',
+      password_hash: DEFAULT_HASH,
+      role: 'ANALYST',
+      is_active: 1,
+      created_at: new Date().toISOString()
+    },
+    {
+      user_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa0003',
+      display_name: 'Compliance Auditor',
+      email: 'compliance@leaklens.local',
+      password_hash: DEFAULT_HASH,
+      role: 'COMPLIANCE_REVIEWER',
+      is_active: 1,
+      created_at: new Date().toISOString()
+    }
+  ],
+  detection_rules: CANONICAL_RULES.map(r => ({ ...r })),
+  scan_jobs: [],
+  files: [],
+  findings: [],
+  audit_logs: []
+};
+
+export default memoryStore;

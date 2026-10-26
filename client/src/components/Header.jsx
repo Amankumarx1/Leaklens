@@ -1,6 +1,7 @@
 import React from 'react';
+import StatusBadge from './StatusBadge';
 
-export function Header({ activeRouteTitle, health, loading, error, onRefresh }) {
+export function Header({ activeRouteTitle, health, loading, error, onRefresh, user, onLogout }) {
   // Determine health indicator
   let statusText = 'Checking system...';
   let dotClass = 'degraded';
@@ -16,7 +17,7 @@ export function Header({ activeRouteTitle, health, loading, error, onRefresh }) 
       statusText = `Operational (${health.components.database.latencyMs || 0}ms)`;
       dotClass = 'healthy';
     } else {
-      statusText = `API Up | DB ${health.components?.database?.status || 'Offline'}`;
+      statusText = `API Up | DB ${health.components?.database?.status || 'Standalone'}`;
       dotClass = 'degraded';
     }
   }
@@ -40,8 +41,29 @@ export function Header({ activeRouteTitle, health, loading, error, onRefresh }) 
           title="Refresh connection status"
           style={{ padding: '6px 12px', fontSize: '12px' }}
         >
-          Check API
+          Ping
         </button>
+
+        {user && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginLeft: '12px', paddingLeft: '12px', borderLeft: '1px solid var(--border-medium)' }}>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '12px', fontWeight: '600' }}>{user.display_name || user.email}</div>
+              <StatusBadge type={user.role === 'ADMIN' ? 'danger' : user.role === 'ANALYST' ? 'info' : 'warning'}>
+                {user.role}
+              </StatusBadge>
+            </div>
+
+            <button
+              id="btn-logout"
+              className="btn btn-secondary"
+              onClick={onLogout}
+              style={{ fontSize: '11px', padding: '6px 10px' }}
+              title="Sign out of LeakLens session"
+            >
+              Sign Out
+            </button>
+          </div>
+        )}
       </div>
     </header>
   );

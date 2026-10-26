@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import env from './config/env.js';
 import requestLogger from './middleware/requestLogger.js';
 import errorHandler from './middleware/errorHandler.js';
@@ -32,6 +33,9 @@ export function createApp() {
       allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
     })
   );
+
+  // Cookie parsing for HttpOnly JWT session tokens
+  app.use(cookieParser());
 
   // Request body parsing with sensible security limits
   app.use(express.json({ limit: '2mb' }));

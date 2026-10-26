@@ -1,21 +1,45 @@
 /**
  * Shared API Client for LeakLens
- * Configured via Vite environment variable VITE_API_URL
+ * Communicates with the Express backend using HttpOnly cookie credentials and JWT bearer fallback.
  */
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
+let authToken = localStorage.getItem('leaklens_token') || null;
+
+export function setAuthToken(token) {
+  authToken = token;
+  if (token) {
+    localStorage.setItem('leaklens_token', token);
+  } else {
+    localStorage.removeItem('leaklens_token');
+  }
+}
+
+export function getAuthToken() {
+  return authToken;
+}
+
 /**
- * Generic JSON request wrapper with consistent error normalization.
+ * Generic request wrapper supporting cookies, Authorization header, and JSON/FormData payloads.
  */
 async function request(endpoint, options = {}) {
   const url = `${API_BASE_URL}${endpoint}`;
+  const headers = { ...options.headers };
+
+  if (authToken && !headers.Authorization) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+
+  // Do not set Content-Type for FormData; browser sets boundary automatically
+  if (!(options.body instanceof FormData) && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+
   const config = {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers
-    },
-    ...options
+    credentials: 'include', // Send and receive HttpOnly cookies
+    ...options,
+    headers
   };
 
   try {
@@ -34,7 +58,7 @@ async function request(endpoint, options = {}) {
     return body;
   } catch (err) {
     if (err.name === 'TypeError' && err.message.includes('Failed to fetch')) {
-      const networkErr = new Error('Unable to connect to LeakLens Backend API. Ensure server is running on ' + API_BASE_URL);
+      const networkErr = new Error(`Unable to connect to LeakLens API at ${API_BASE_URL}`);
       networkErr.code = 'NETWORK_UNAVAILABLE';
       throw networkErr;
     }
@@ -42,22 +66,103 @@ async function request(endpoint, options = {}) {
   }
 }
 
-/**
- * Fetches backend operational health status.
- */
+// -----------------------------------------------------------------------------
+// Authentication Endpoints
+// -----------------------------------------------------------------------------
+export async function login(email, password) {
+  const res = await request('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password })
+  });
+  if (res?.data?.token) {
+    setAuthToken(res.data.token);
+  }
+  return res;
+}
+
+export async function logout() {
+  try {
+    await request('/auth/logout', { method: 'POST' });
+  } finally {
+    setAuthToken(null);
+  }
+}
+
+export async function getProfile() {
+  return request('/auth/me');
+}
+
+// -----------------------------------------------------------------------------
+// Health & Diagnostics
+// -----------------------------------------------------------------------------
 export async function getHealthStatus() {
   return request('/health');
 }
 
-/**
- * Helper to query placeholder modules.
- */
-export async function getModuleStatus(moduleSlug) {
-  return request(`/${moduleSlug}`);
+// -----------------------------------------------------------------------------
+// Scans & Ingestion
+// -----------------------------------------------------------------------------
+export async function uploadAndScanFile(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  return request('/scans', {
+    method: 'POST',
+    body: formData
+  });
+}
+
+export async function getScans(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/scans${query ? `?${query}` : ''}`);
+}
+
+export async function getScanById(scanId) {
+  return request(`/scans/${scanId}`);
+}
+
+export async function getScanFindings(scanId) {
+  return request(`/scans/${scanId}/findings`);
+}
+
+// -----------------------------------------------------------------------------
+// Findings & Redaction
+// -----------------------------------------------------------------------------
+export async function getFindings(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/findings${query ? `?${query}` : ''}`);
+}
+
+export async function getFindingById(findingId) {
+  return request(`/findings/${findingId}`);
+}
+
+// -----------------------------------------------------------------------------
+// Analytics & Audit
+// -----------------------------------------------------------------------------
+export async function getDashboardAnalytics() {
+  return request('/analytics/dashboard');
+}
+
+export async function getAuditLogs(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return request(`/audit-logs${query ? `?${query}` : ''}`);
 }
 
 export default {
+  login,
+  logout,
+  getProfile,
   getHealthStatus,
-  getModuleStatus,
+  uploadAndScanFile,
+  getScans,
+  getScanById,
+  getScanFindings,
+  getFindings,
+  getFindingById,
+  getDashboardAnalytics,
+  getAuditLogs,
+  setAuthToken,
+  getAuthToken,
   API_BASE_URL
 };

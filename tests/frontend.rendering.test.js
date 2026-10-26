@@ -21,12 +21,14 @@ describe('Frontend Application Shell & Navigation Structure', () => {
       path.join(clientSrc, 'components', 'LoadingState.jsx'),
       path.join(clientSrc, 'components', 'ErrorState.jsx'),
       path.join(clientSrc, 'components', 'StatusBadge.jsx'),
+      path.join(clientSrc, 'components', 'FindingDetailModal.jsx'),
       path.join(clientSrc, 'layouts', 'AppLayout.jsx'),
+      path.join(clientSrc, 'pages', 'LoginPage.jsx'),
       path.join(clientSrc, 'pages', 'DashboardPage.jsx'),
       path.join(clientSrc, 'pages', 'ScansPage.jsx'),
+      path.join(clientSrc, 'pages', 'NewScanPage.jsx'),
+      path.join(clientSrc, 'pages', 'ScanDetailPage.jsx'),
       path.join(clientSrc, 'pages', 'FindingsPage.jsx'),
-      path.join(clientSrc, 'pages', 'IncidentsPage.jsx'),
-      path.join(clientSrc, 'pages', 'AnalyticsPage.jsx'),
       path.join(clientSrc, 'pages', 'AuditLogsPage.jsx'),
       path.join(clientSrc, 'pages', 'SettingsPage.jsx'),
       path.join(clientSrc, 'services', 'api.js'),
@@ -38,22 +40,20 @@ describe('Frontend Application Shell & Navigation Structure', () => {
     }
   });
 
-  it('should register all 7 functional navigation routes in Sidebar and App', () => {
-    const sidebarContent = fs.readFileSync(path.join(clientSrc, 'components', 'Sidebar.jsx'), 'utf8');
+  it('should register functional navigation routes in App.jsx', () => {
     const appContent = fs.readFileSync(path.join(clientSrc, 'App.jsx'), 'utf8');
 
     const expectedRoutes = [
       'dashboard',
       'scans',
+      'scans-new',
+      'scan-detail',
       'findings',
-      'incidents',
-      'analytics',
       'audit-logs',
       'settings'
     ];
 
     for (const route of expectedRoutes) {
-      expect(sidebarContent).toContain(`id: '${route}'`);
       expect(appContent).toContain(`case '${route}':`);
     }
   });
@@ -61,19 +61,26 @@ describe('Frontend Application Shell & Navigation Structure', () => {
   it('should maintain honest empty state and not fabricate security metrics', () => {
     const dashboardContent = fs.readFileSync(path.join(clientSrc, 'pages', 'DashboardPage.jsx'), 'utf8');
 
-    // Asserts honest zero-metric display in Phase 1
     expect(dashboardContent).toContain('Completed Scans');
     expect(dashboardContent).toContain('Awaiting first scan job');
     expect(dashboardContent).toContain('Exposures Detected');
     expect(dashboardContent).toContain('No findings recorded');
-    expect(dashboardContent).toContain('Open Incidents');
-    expect(dashboardContent).toContain('Zero active triage cases');
     expect(dashboardContent).toContain('No Exposure Telemetry Recorded');
+  });
+
+  it('should enforce role restrictions on scan upload in NewScanPage', () => {
+    const newScanContent = fs.readFileSync(path.join(clientSrc, 'pages', 'NewScanPage.jsx'), 'utf8');
+
+    expect(newScanContent).toContain('COMPLIANCE_REVIEWER');
+    expect(newScanContent).toContain('Access Restricted');
+    expect(newScanContent).toContain('.txt,.json,.csv');
   });
 
   it('should configure shared API client with environment fallback', () => {
     const apiContent = fs.readFileSync(path.join(clientSrc, 'services', 'api.js'), 'utf8');
     expect(apiContent).toContain('import.meta.env.VITE_API_URL');
     expect(apiContent).toContain('/health');
+    expect(apiContent).toContain('/auth/login');
+    expect(apiContent).toContain('/scans');
   });
 });

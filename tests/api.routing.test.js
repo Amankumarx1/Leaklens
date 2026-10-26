@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../server/src/app.js';
 
-describe('Routing & Error Prevention', () => {
+describe('Routing & Access Control Foundation', () => {
   const app = createApp();
 
   it('should return 404 with standardized error response for unknown API routes', async () => {
@@ -15,15 +15,25 @@ describe('Routing & Error Prevention', () => {
     expect(res.body.error.message).toContain('not found');
   });
 
-  it('should return 200 with under-development phase notice for placeholder endpoints', async () => {
-    const endpoints = ['/api/scans', '/api/findings', '/api/incidents', '/api/analytics', '/api/audit-logs'];
+  it('should require authentication (401) for protected domain routes', async () => {
+    const protectedEndpoints = ['/api/scans', '/api/findings', '/api/analytics/dashboard', '/api/audit-logs'];
+
+    for (const endpoint of protectedEndpoints) {
+      const res = await request(app).get(endpoint);
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.code).toBe('UNAUTHORIZED');
+    }
+  });
+
+  it('should return 200 with under-development notice for Phase 3 placeholder endpoints', async () => {
+    const endpoints = ['/api/incidents', '/api/rules'];
 
     for (const endpoint of endpoints) {
       const res = await request(app).get(endpoint);
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.data.status).toContain('Under Development');
-      expect(res.body.data.phase).toContain('Phase 1');
     }
   });
 

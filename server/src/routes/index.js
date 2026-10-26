@@ -1,5 +1,10 @@
 import { Router } from 'express';
 import healthRoutes from './health.routes.js';
+import authRoutes from './auth.routes.js';
+import scanRoutes from './scan.routes.js';
+import findingRoutes from './finding.routes.js';
+import analyticsRoutes from './analytics.routes.js';
+import auditRoutes from './audit.routes.js';
 import { successResponse } from '../utils/apiResponse.js';
 
 const apiRouter = Router();
@@ -7,27 +12,27 @@ const apiRouter = Router();
 // Operational health endpoint
 apiRouter.use('/health', healthRoutes);
 
-// Foundation placeholder endpoints for subsequent phases
-// Explains clearly that these workflows will be developed in future phases
-const placeholderModules = [
-  { path: '/scans', name: 'Scanner Engine & Jobs' },
-  { path: '/findings', name: 'Findings & Redaction Management' },
-  { path: '/incidents', name: 'Incident Response & Assignment' },
-  { path: '/analytics', name: 'Security Exposure Analytics' },
-  { path: '/audit-logs', name: 'Defensive Audit Trail' },
-  { path: '/rules', name: 'Detection Rules & Signatures' },
-  { path: '/auth', name: 'Role-Based Authentication & Access Control' }
+// Phase 2 Functional Routes
+apiRouter.use('/auth', authRoutes);
+apiRouter.use('/scans', scanRoutes);
+apiRouter.use('/findings', findingRoutes);
+apiRouter.use('/analytics', analyticsRoutes);
+apiRouter.use('/audit-logs', auditRoutes);
+
+// Phase 3 & Subsequent Phase Placeholders
+const futureModules = [
+  { path: '/incidents', name: 'Incident Response & Containment Workflow' },
+  { path: '/rules', name: 'Dynamic Custom Detection Rule Authoring' }
 ];
 
-for (const mod of placeholderModules) {
+for (const mod of futureModules) {
   apiRouter.all(mod.path, (req, res) => {
     return successResponse(
       res,
       {
         module: mod.name,
-        phase: 'Phase 1 Foundation Established',
-        status: 'Under Development (Scheduled for Subsequent Phase)',
-        availableActions: ['GET /api/health']
+        phase: 'Scheduled for Phase 3',
+        status: 'Under Development'
       },
       null,
       200

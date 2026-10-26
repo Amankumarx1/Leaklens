@@ -23,6 +23,16 @@ const NAV_ITEMS = [
     )
   },
   {
+    id: 'scans-new',
+    label: '+ Scan File',
+    restrictedRoles: ['COMPLIANCE_REVIEWER'],
+    icon: (
+      <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+        <path d="M12 5v14M5 12h14" />
+      </svg>
+    )
+  },
+  {
     id: 'findings',
     label: 'Findings',
     icon: (
@@ -30,28 +40,6 @@ const NAV_ITEMS = [
         <circle cx="12" cy="12" r="10" />
         <line x1="12" y1="8" x2="12" y2="12" />
         <line x1="12" y1="16" x2="12.01" y2="16" />
-      </svg>
-    )
-  },
-  {
-    id: 'incidents',
-    label: 'Incidents',
-    icon: (
-      <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-        <line x1="12" y1="9" x2="12" y2="13" />
-        <line x1="12" y1="17" x2="12.01" y2="17" />
-      </svg>
-    )
-  },
-  {
-    id: 'analytics',
-    label: 'Analytics',
-    icon: (
-      <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-        <line x1="18" y1="20" x2="18" y2="10" />
-        <line x1="12" y1="20" x2="12" y2="4" />
-        <line x1="6" y1="20" x2="6" y2="14" />
       </svg>
     )
   },
@@ -80,7 +68,9 @@ const NAV_ITEMS = [
   }
 ];
 
-export function Sidebar({ activeRoute, onNavigate }) {
+export function Sidebar({ activeRoute, onNavigate, user }) {
+  const isCompliance = user?.role === 'COMPLIANCE_REVIEWER';
+
   return (
     <aside className="app-sidebar">
       <div className="sidebar-brand">
@@ -92,22 +82,30 @@ export function Sidebar({ activeRoute, onNavigate }) {
       </div>
 
       <nav className="sidebar-menu">
-        {NAV_ITEMS.map(item => (
-          <button
-            key={item.id}
-            id={`nav-link-${item.id}`}
-            className={`nav-item ${activeRoute === item.id ? 'active' : ''}`}
-            onClick={() => onNavigate(item.id)}
-          >
-            {item.icon}
-            <span>{item.label}</span>
-          </button>
-        ))}
+        {NAV_ITEMS.map(item => {
+          if (item.restrictedRoles && item.restrictedRoles.includes(user?.role)) {
+            return null; // Hide restricted action button from navigation
+          }
+
+          return (
+            <button
+              key={item.id}
+              id={`nav-link-${item.id}`}
+              className={`nav-item ${activeRoute === item.id ? 'active' : ''}`}
+              onClick={() => onNavigate(item.id)}
+            >
+              {item.icon}
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
       </nav>
 
       <div className="sidebar-footer">
-        <div>Platform: v1.0.0-phase1</div>
-        <div style={{ color: 'var(--accent-cyan)', marginTop: '4px' }}>RBAC Groundwork Active</div>
+        <div>Role: <strong>{user?.role || 'Guest'}</strong></div>
+        <div style={{ color: isCompliance ? 'var(--status-warning)' : 'var(--accent-cyan)', marginTop: '4px' }}>
+          {isCompliance ? 'Read-Only Audit Mode' : 'Scanner Engaged'}
+        </div>
       </div>
     </aside>
   );
