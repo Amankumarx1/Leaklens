@@ -12,19 +12,6 @@ export function DashboardPage({ health: _health, user, onNavigate }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Copilot Assistant State (Right Column)
-  const [copilotInput, setCopilotInput] = useState('');
-  const [copilotHistory, setCopilotHistory] = useState([
-    {
-      sender: 'user',
-      text: "Hi, I've noticed an exposed credential in a diagnostic dump, what's our rotation protocol?"
-    },
-    {
-      sender: 'assistant',
-      text: "LeakLens Copilot: Immediately invalidate the exposed keypair, inspect access logs for abnormal IP usage, and escalate to an Incident for atomic tracking."
-    }
-  ]);
-  const [quickActionRunning, setQuickActionRunning] = useState(false);
   const [selectedPillFilter, setSelectedPillFilter] = useState('All');
 
   const fetchMetrics = useCallback(async () => {
@@ -84,34 +71,6 @@ export function DashboardPage({ health: _health, user, onNavigate }) {
     return () => { ignore = true; };
   }, []);
 
-  const handleCopilotSubmit = (e) => {
-    e.preventDefault();
-    if (!copilotInput.trim()) return;
-
-    const userText = copilotInput.trim();
-    setCopilotHistory(prev => [...prev, { sender: 'user', text: userText }]);
-    setCopilotInput('');
-
-    setTimeout(() => {
-      let reply = "Security Advice: Ensure all diagnostic files are scanned through the pre-flight pipeline before sharing with external partners.";
-      if (userText.toLowerCase().includes('aws') || userText.toLowerCase().includes('key')) {
-        reply = "AWS Credentials Detected: Rotate the IAM Access Key in AWS IAM immediately and verify zero subsequent API calls in CloudTrail.";
-      } else if (userText.toLowerCase().includes('github') || userText.toLowerCase().includes('pat')) {
-        reply = "GitHub Token Detected: Revoke the personal access token on GitHub.com and review secret-scanning alerts in your repository settings.";
-      } else if (userText.toLowerCase().includes('status') || userText.toLowerCase().includes('health')) {
-        reply = "System Status: LeakLens engine is healthy with in-memory zero-knowledge masking active and MSSQL database connected.";
-      }
-      setCopilotHistory(prev => [...prev, { sender: 'assistant', text: reply }]);
-    }, 600);
-  };
-
-  const handleRunQuickTriage = () => {
-    setQuickActionRunning(true);
-    setTimeout(() => {
-      setQuickActionRunning(false);
-      if (onNavigate) onNavigate('incidents');
-    }, 800);
-  };
 
   if (loading && !metrics) {
     return <LoadingState message="Loading security posture metrics & telemetry..." />;
@@ -137,7 +96,7 @@ export function DashboardPage({ health: _health, user, onNavigate }) {
             Dashboard
           </h1>
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-            Real-time exposure intelligence, volatile memory scanning, and incident response.
+            Welcome back, <strong style={{ color: 'var(--text-primary)' }}>{operatorName}</strong> • Real-time exposure intelligence, volatile memory scanning, and incident response.
           </p>
         </div>
 
@@ -176,11 +135,8 @@ export function DashboardPage({ health: _health, user, onNavigate }) {
         </div>
       </div>
 
-      {/* Main Dual-Column Workspace */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '24px', alignItems: 'start' }}>
-        
-        {/* Left Column: Hero Art Cards, Metrics & Tables */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', minWidth: 0 }}>
+      {/* Main Security Operations Workspace */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%' }}>
           
           {/* Hero Feature Art Cards (Inspired by Reference Screenshot) */}
           <div className="hero-art-grid">
@@ -521,150 +477,7 @@ export function DashboardPage({ health: _health, user, onNavigate }) {
             </div>
           )}
         </div>
-
-        {/* Right Column: SOC Copilot Assistant (Matching "Good Morning Andrew" Widget) */}
-        <div 
-          className="panel"
-          style={{
-            position: 'sticky',
-            top: '110px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '16px',
-            padding: '24px 20px',
-            borderRadius: 'var(--radius-xl)'
-          }}
-        >
-          {/* Header 3D Orb & Greeting */}
-          <div style={{ textAlign: 'center', paddingBottom: '12px', borderBottom: '1px solid rgba(226, 232, 240, 0.7)' }}>
-            <div 
-              className="brand-orb" 
-              style={{ width: '56px', height: '56px', margin: '0 auto 12px auto', padding: '6px' }}
-              aria-hidden="true" 
-            >
-              <img 
-                src="/logo-icon.png" 
-                alt="LeakLens Copilot" 
-                style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
-              />
-            </div>
-            <h3 style={{ fontSize: '19px', fontWeight: '800', letterSpacing: '-0.02em', color: 'var(--text-primary)', lineHeight: 1.25 }}>
-              Good Day <span style={{ color: 'var(--accent-cyan)' }}>{operatorName}</span>,<br />What's on your mind?
-            </h3>
-            <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-              LeakLens Intelligent SOC Assistant
-            </p>
-          </div>
-
-          {/* Conversational Stream */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '280px', overflowY: 'auto' }}>
-            {copilotHistory.map((msg, i) => (
-              <div 
-                key={i}
-                style={{
-                  alignSelf: msg.sender === 'user' ? 'flex-end' : 'flex-start',
-                  maxWidth: '92%',
-                  fontSize: '12px',
-                  lineHeight: '1.45',
-                  padding: '10px 14px',
-                  borderRadius: msg.sender === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                  background: msg.sender === 'user' ? '#1e293b' : 'rgba(255, 255, 255, 0.85)',
-                  color: msg.sender === 'user' ? '#ffffff' : 'var(--text-primary)',
-                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
-                  border: msg.sender === 'user' ? 'none' : '1px solid rgba(255, 255, 255, 0.9)'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', fontWeight: 700, marginBottom: '2px', opacity: 0.7, textTransform: 'uppercase' }}>
-                  {msg.sender === 'assistant' && (
-                    <img src="/logo-icon.png" alt="LL" style={{ width: '12px', height: '12px', objectFit: 'contain' }} />
-                  )}
-                  {msg.sender === 'user' ? 'You' : 'LeakLens Copilot'}
-                </div>
-                {msg.text}
-              </div>
-            ))}
-          </div>
-
-          {/* Quick Action Interactive Widget (Matching "Ease into Sleep" Play Card) */}
-          <div 
-            style={{
-              background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(240, 249, 255, 0.8))',
-              border: '1px solid rgba(255, 255, 255, 0.95)',
-              borderRadius: 'var(--radius-pill)',
-              padding: '8px 12px 8px 8px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              boxShadow: '0 4px 14px rgba(0, 0, 0, 0.04)',
-              cursor: 'pointer'
-            }}
-            onClick={handleRunQuickTriage}
-            title="Execute automated incident triage assessment"
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'linear-gradient(135deg, #a7f3d0, #38bdf8)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px' }}>
-                🛡️
-              </div>
-              <div>
-                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                  {quickActionRunning ? 'Running Triage...' : 'Auto-Triage Incidents'}
-                </div>
-                <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                  SOC SLA • 1-Click Inspection
-                </div>
-              </div>
-            </div>
-
-            <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(0, 0, 0, 0.08)', fontSize: '11px', color: 'var(--text-primary)' }}>
-              ▶
-            </div>
-          </div>
-
-          {/* Copilot Input Bar (Matching "Ask Anything..." with Mic and Send) */}
-          <form onSubmit={handleCopilotSubmit} style={{ marginTop: 'auto' }}>
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <input
-                type="text"
-                className="input"
-                placeholder="Ask SOC Assistant..."
-                value={copilotInput}
-                onChange={(e) => setCopilotInput(e.target.value)}
-                style={{
-                  borderRadius: 'var(--radius-pill)',
-                  padding: '10px 42px 10px 16px',
-                  fontSize: '12px',
-                  backgroundColor: 'rgba(255, 255, 255, 0.85)',
-                  border: '1px solid rgba(255, 255, 255, 0.95)',
-                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)'
-                }}
-              />
-              <button
-                type="submit"
-                style={{
-                  position: 'absolute',
-                  right: '6px',
-                  width: '28px',
-                  height: '28px',
-                  borderRadius: '50%',
-                  background: 'var(--text-primary)',
-                  color: '#ffffff',
-                  border: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  fontSize: '11px'
-                }}
-                title="Send query"
-              >
-                ↗
-              </button>
-            </div>
-          </form>
-        </div>
-
       </div>
-    </div>
   );
 }
 
