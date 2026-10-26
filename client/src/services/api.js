@@ -125,6 +125,12 @@ export async function getScanFindings(scanId) {
   return request(`/scans/${scanId}/findings`);
 }
 
+export async function clearAllScanData() {
+  return request('/scans/clear', {
+    method: 'POST'
+  });
+}
+
 // -----------------------------------------------------------------------------
 // Findings & Redaction
 // -----------------------------------------------------------------------------
@@ -249,6 +255,7 @@ export default {
   getScans,
   getScanById,
   getScanFindings,
+  clearAllScanData,
   getFindings,
   getFindingById,
   getIncidents,

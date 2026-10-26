@@ -50,4 +50,14 @@ export const memoryStore = {
   audit_logs: []
 };
 
+export function clearMemoryStore() {
+  memoryStore.scan_jobs = [];
+  memoryStore.files = [];
+  memoryStore.findings = [];
+  memoryStore.incidents = [];
+  memoryStore.incident_findings = [];
+  memoryStore.remediation_actions = [];
+  memoryStore.audit_logs = [];
+}
+
 export default memoryStore;

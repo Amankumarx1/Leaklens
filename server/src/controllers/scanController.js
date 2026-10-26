@@ -56,9 +56,15 @@ export async function getScanFindingsList(req, res) {
   return successResponse(res, findings, { scan_id: scanId, count: findings.length }, 200);
 }
 
+export async function clearAllData(_req, res) {
+  await scanRepository.clearAllScanData();
+  return successResponse(res, { message: 'All operational scans, findings, and incidents cleared.' }, null, 200);
+}
+
 export default {
   initiateScan,
   getScans,
   getScanDetails,
-  getScanFindingsList
+  getScanFindingsList,
+  clearAllData
 };

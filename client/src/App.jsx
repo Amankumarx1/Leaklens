@@ -26,7 +26,7 @@ const ROUTE_TITLES = {
   'incident-detail': 'Incident Response Workspace',
   'audit-logs': 'Defensive Audit Trail',
   settings: 'System Configuration',
-  analytics: 'Security Posture Analytics & Power BI',
+  analytics: 'Security Posture Analytics',
   'not-found': '404 — Page Not Found'
 };
 

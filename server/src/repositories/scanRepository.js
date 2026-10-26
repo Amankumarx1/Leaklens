@@ -282,6 +282,35 @@ export async function getScanFindings(scan_id) {
     });
 }
 
+export async function clearAllScanData() {
+  const dbHealth = await checkDatabaseHealth();
+  if (dbHealth.isHealthy) {
+    try {
+      await executeQuery(`
+        DELETE FROM leaklens.remediation_actions;
+        DELETE FROM leaklens.incident_findings;
+        DELETE FROM leaklens.incidents;
+        DELETE FROM leaklens.findings;
+        DELETE FROM leaklens.files;
+        DELETE FROM leaklens.scan_jobs;
+      `);
+    } catch {
+      // Ignore if table doesn't exist
+    }
+  }
+
+  // Clear memory store data
+  memoryStore.scan_jobs = [];
+  memoryStore.files = [];
+  memoryStore.findings = [];
+  memoryStore.incidents = [];
+  memoryStore.incident_findings = [];
+  memoryStore.remediation_actions = [];
+  memoryStore.audit_logs = [];
+
+  return { cleared: true };
+}
+
 export default {
   createScanJob,
   createFileRecord,
@@ -289,5 +318,6 @@ export default {
   updateScanStatus,
   listScans,
   getScanById,
-  getScanFindings
+  getScanFindings,
+  clearAllScanData
 };

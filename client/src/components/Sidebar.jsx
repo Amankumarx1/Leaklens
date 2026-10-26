@@ -77,6 +77,18 @@ const OPERATION_ITEMS = [
     )
   },
   {
+    id: 'analytics',
+    label: 'Analytics',
+    matchRoutes: ['analytics'],
+    icon: (
+      <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+        <line x1="18" y1="20" x2="18" y2="10" />
+        <line x1="12" y1="20" x2="12" y2="4" />
+        <line x1="6" y1="20" x2="6" y2="14" />
+      </svg>
+    )
+  },
+  {
     id: 'settings',
     label: 'Settings',
     matchRoutes: ['settings'],

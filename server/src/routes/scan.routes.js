@@ -64,4 +64,8 @@ router.get('/:id', authenticateToken, scanController.getScanDetails);
 // GET /api/scans/:id/findings — Findings for specific scan
 router.get('/:id/findings', authenticateToken, scanController.getScanFindingsList);
 
+// POST & DELETE /api/scans/clear — Reset operational scan and finding data (ADMIN role)
+router.post('/clear', authenticateToken, requireRole([ROLES.ADMIN]), scanController.clearAllData);
+router.delete('/clear', authenticateToken, requireRole([ROLES.ADMIN]), scanController.clearAllData);
+
 export default router;

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import StatusBadge from '../components/StatusBadge';
-import { getHealthStatus } from '../services/api';
+import { getHealthStatus, clearAllScanData } from '../services/api';
 
 const DEFAULT_PREFERENCES = {
   maxUploadThresholdMb: 5,
@@ -24,14 +24,19 @@ export function SettingsPage({ health, user, onNavigate }) {
 
   const [saveStatus, setSaveStatus] = useState(null); // { type: 'success' | 'error', message: string }
 
-  // Pattern Simulator state
-  const [simulatorInput, setSimulatorInput] = useState('API_KEY=key_test_abcdef123456789\nGITHUB_PAT=ghp_demoSecretToken0987654321FedCba\nINTERNAL_ID=LL-ID-A1B2-C3D4\nCONTACT_EMAIL=secops@leaklens.local');
+  // Pattern Simulator state — starts clean without seeded fake data
+  const [simulatorInput, setSimulatorInput] = useState('');
   const [simulatorResults, setSimulatorResults] = useState(null);
 
   // Live Diagnostics state
   const [diagnosticsHealth, setDiagnosticsHealth] = useState(health || null);
   const [pinging, setPinging] = useState(false);
   const [pingLatency, setPingLatency] = useState(null);
+
+  // Clear data state
+  const [clearingData, setClearingData] = useState(false);
+  const [clearConfirm, setClearConfirm] = useState(false);
+  const [clearStatus, setClearStatus] = useState(null);
 
   const detectionRules = [
     { id: 'RULE-EMAIL', name: 'RFC Email Address Pattern', category: 'EMAIL_ADDRESS', regex: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, severity: 'low', status: 'Enabled' },
@@ -126,17 +131,32 @@ export function SettingsPage({ health, user, onNavigate }) {
     }
   };
 
+  const handleClearOperationalData = async () => {
+    try {
+      setClearingData(true);
+      await clearAllScanData();
+      setClearConfirm(false);
+      setClearStatus({ type: 'success', message: 'Operational scan and finding memory has been completely cleared.' });
+      setTimeout(() => setClearStatus(null), 4000);
+    } catch (err) {
+      setClearStatus({ type: 'error', message: err.message || 'Failed to clear operational data.' });
+    } finally {
+      setClearingData(false);
+    }
+  };
+
   const isDbConnected = (diagnosticsHealth || health)?.components?.database?.status === 'connected';
+  const isAdmin = user?.role === 'ADMIN';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h2 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
-            Platform Settings & Security Posture
-          </h2>
-          <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+          <h1 style={{ fontSize: '24px', fontWeight: '800', letterSpacing: '-0.02em', color: 'var(--text-primary)', margin: 0 }}>
+            Platform Settings & Diagnostics
+          </h1>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
             Operator preferences, live detection rule simulator, and runtime cloud architecture.
           </p>
         </div>
@@ -170,7 +190,7 @@ export function SettingsPage({ health, user, onNavigate }) {
           className={`btn ${activeTab === 'diagnostics' ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => setActiveTab('diagnostics')}
         >
-          Cloud Architecture & Diagnostics
+          Diagnostics & Cloud
         </button>
       </div>
 
@@ -224,7 +244,7 @@ export function SettingsPage({ health, user, onNavigate }) {
                 className="input"
                 value={user?.email || 'analyst@leaklens.local'}
                 disabled
-                style={{ width: '100%', maxWidth: '400px', opacity: 0.7, backgroundColor: 'var(--bg-app)' }}
+                style={{ width: '100%', maxWidth: '400px', opacity: 0.7, backgroundColor: 'rgba(255, 255, 255, 0.4)' }}
               />
               <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>
                 Security Note: Email and role authority are strictly governed server-side and cannot be altered client-side.
@@ -319,7 +339,7 @@ export function SettingsPage({ health, user, onNavigate }) {
           <div className="panel">
             <div className="panel-header">
               <h3>Active Detection Signatures</h3>
-              <StatusBadge type="healthy">4 Signatures Live</StatusBadge>
+              <StatusBadge type="healthy">{detectionRules.length} Signatures Active</StatusBadge>
             </div>
 
             <div style={{ overflowX: 'auto', marginTop: '12px' }}>
@@ -378,7 +398,7 @@ export function SettingsPage({ health, user, onNavigate }) {
                 value={simulatorInput}
                 onChange={(e) => setSimulatorInput(e.target.value)}
                 style={{ width: '100%', fontFamily: 'var(--font-mono)', fontSize: '12px', lineHeight: 1.5 }}
-                placeholder="Paste sample config, env dump, or connection string..."
+                placeholder="Paste sample config, env dump, or connection string to test detection signatures..."
               />
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
@@ -396,13 +416,13 @@ export function SettingsPage({ health, user, onNavigate }) {
                     Simulation Results ({simulatorResults.length} Matched)
                   </h4>
                   {simulatorResults.length === 0 ? (
-                    <div style={{ padding: '12px', background: 'var(--bg-app)', borderRadius: 'var(--radius-sm)', color: 'var(--status-healthy)', fontSize: '13px' }}>
+                    <div style={{ padding: '12px', background: 'var(--status-healthy-bg)', borderRadius: 'var(--radius-sm)', color: 'var(--status-healthy)', fontSize: '13px' }}>
                       ✓ No secret signatures detected in sample input.
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       {simulatorResults.map((res, i) => (
-                        <div key={i} style={{ padding: '10px 12px', background: 'var(--bg-app)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', fontSize: '13px' }}>
+                        <div key={i} style={{ padding: '10px 12px', background: 'rgba(255, 255, 255, 0.7)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', fontSize: '13px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                             <span style={{ fontWeight: 600 }}>{res.ruleName}</span>
                             <StatusBadge type={res.severity === 'critical' ? 'danger' : 'warning'}>{res.severity}</StatusBadge>
@@ -424,85 +444,148 @@ export function SettingsPage({ health, user, onNavigate }) {
 
       {/* TAB 3: Diagnostics & Cloud Architecture */}
       {activeTab === 'diagnostics' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
-          {/* Runtime Diagnostics */}
-          <div className="panel">
-            <div className="panel-header">
-              <h3>Runtime Diagnostics</h3>
-              <StatusBadge type="healthy">{(diagnosticsHealth || health)?.environment || 'production'}</StatusBadge>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {clearStatus && (
+            <div style={{
+              padding: '12px 16px',
+              borderRadius: 'var(--radius-md)',
+              fontSize: '13px',
+              backgroundColor: clearStatus.type === 'success' ? 'var(--status-healthy-bg)' : 'var(--status-danger-bg)',
+              color: clearStatus.type === 'success' ? 'var(--status-healthy)' : 'var(--status-danger)',
+              border: `1px solid ${clearStatus.type === 'success' ? 'var(--status-healthy)' : 'var(--status-danger)'}`
+            }}>
+              {clearStatus.message}
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
+            {/* Runtime Diagnostics */}
+            <div className="panel">
+              <div className="panel-header">
+                <h3>Runtime Diagnostics</h3>
+                <StatusBadge type="healthy">{(diagnosticsHealth || health)?.environment || 'production'}</StatusBadge>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '13px', marginTop: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>API Gateway:</span>
+                  <span style={{ fontFamily: 'var(--font-mono)' }}>{import.meta.env.VITE_API_URL || '/api'}</span>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Liveness Status:</span>
+                  <span style={{ color: 'var(--status-healthy)', fontWeight: 600 }}>
+                    {(diagnosticsHealth || health)?.components?.api?.status === 'up' ? 'Online (HTTP 200)' : 'Pending'}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Relational Database:</span>
+                  <span style={{ color: isDbConnected ? 'var(--status-healthy)' : 'var(--status-warning)', fontWeight: 600 }}>
+                    {isDbConnected ? 'Connected (Azure SQL / MSSQL)' : 'Degraded / Local Fallback'}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Last Ping Latency:</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-cyan)' }}>
+                    {pingLatency !== null ? `${pingLatency} ms` : 'Not tested'}
+                  </span>
+                </div>
+
+                <div style={{ marginTop: '8px' }}>
+                  <button
+                    id="btn-ping-diagnostics"
+                    className="btn btn-secondary"
+                    onClick={handlePingDiagnostics}
+                    disabled={pinging}
+                    style={{ width: '100%', justifyContent: 'center' }}
+                  >
+                    {pinging ? 'Pinging /health...' : 'Execute Live Diagnostics Ping'}
+                  </button>
+                </div>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '13px', marginTop: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>API Gateway:</span>
-                <span style={{ fontFamily: 'var(--font-mono)' }}>{import.meta.env.VITE_API_URL || '/api'}</span>
+            {/* Cloud Security Architecture */}
+            <div className="panel">
+              <div className="panel-header">
+                <h3>Cloud Security Architecture</h3>
+                <StatusBadge type="info">Azure Native</StatusBadge>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Liveness Status:</span>
-                <span style={{ color: 'var(--status-healthy)', fontWeight: 600 }}>
-                  {(diagnosticsHealth || health)?.components?.api?.status === 'up' ? 'Online (HTTP 200)' : 'Pending'}
-                </span>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Relational Database:</span>
-                <span style={{ color: isDbConnected ? 'var(--status-healthy)' : 'var(--status-warning)', fontWeight: 600 }}>
-                  {isDbConnected ? 'Connected (Azure SQL / MSSQL)' : 'Degraded / Local Fallback'}
-                </span>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Last Ping Latency:</span>
-                <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-cyan)' }}>
-                  {pingLatency !== null ? `${pingLatency} ms` : 'Not tested'}
-                </span>
-              </div>
-
-              <div style={{ marginTop: '8px' }}>
-                <button
-                  id="btn-ping-diagnostics"
-                  className="btn btn-secondary"
-                  onClick={handlePingDiagnostics}
-                  disabled={pinging}
-                  style={{ width: '100%', justifyContent: 'center' }}
-                >
-                  {pinging ? 'Pinging /health...' : 'Execute Live Diagnostics Ping'}
-                </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '13px', marginTop: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Transport Encryption:</span>
+                  <span style={{ color: 'var(--status-healthy)' }}>HTTPS (TLS 1.2+ Enforced)</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Object Storage Isolation:</span>
+                  <span style={{ color: 'var(--status-healthy)' }}>Private Container (leaklens-scans)</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Service Identity:</span>
+                  <span style={{ color: 'var(--status-healthy)' }}>Microsoft Entra Managed Identity</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Runtime Secrets:</span>
+                  <span style={{ color: 'var(--status-healthy)' }}>Azure Key Vault (RBAC Authorized)</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>HTTP Perimeter Headers:</span>
+                  <span style={{ color: 'var(--status-healthy)' }}>CSP, HSTS, X-Frame-Options: DENY</span>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Cloud Security Architecture */}
-          <div className="panel">
-            <div className="panel-header">
-              <h3>Cloud Security Architecture</h3>
-              <StatusBadge type="info">Azure Native</StatusBadge>
-            </div>
+          {/* Platform Operational Reset (Admin only) */}
+          {isAdmin && (
+            <div className="panel" style={{ borderLeft: '4px solid var(--status-warning)' }}>
+              <div className="panel-header">
+                <div>
+                  <h3 style={{ color: 'var(--text-primary)' }}>Operational Data Reset</h3>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                    Flush all in-memory or database scan executions, finding records, and incidents to restore a fresh zero-state.
+                  </p>
+                </div>
+              </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '13px', marginTop: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Transport Encryption:</span>
-                <span style={{ color: 'var(--status-healthy)' }}>HTTPS (TLS 1.2+ Enforced)</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Object Storage Isolation:</span>
-                <span style={{ color: 'var(--status-healthy)' }}>Private Container (leaklens-scans)</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Service Identity:</span>
-                <span style={{ color: 'var(--status-healthy)' }}>Microsoft Entra Managed Identity</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Runtime Secrets:</span>
-                <span style={{ color: 'var(--status-healthy)' }}>Azure Key Vault (RBAC Authorized)</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>HTTP Perimeter Headers:</span>
-                <span style={{ color: 'var(--status-healthy)' }}>CSP, HSTS, X-Frame-Options: DENY</span>
+              <div style={{ marginTop: '12px' }}>
+                {clearConfirm ? (
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '13px', color: 'var(--status-danger)', fontWeight: 600 }}>
+                      Are you sure? This action clears all operational scans and findings.
+                    </span>
+                    <button
+                      id="btn-settings-confirm-clear"
+                      className="btn btn-danger"
+                      onClick={handleClearOperationalData}
+                      disabled={clearingData}
+                    >
+                      {clearingData ? 'Clearing...' : 'Confirm Reset'}
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => setClearConfirm(false)}
+                      disabled={clearingData}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    id="btn-settings-clear-data"
+                    className="btn btn-secondary"
+                    onClick={() => setClearConfirm(true)}
+                    style={{ color: 'var(--status-danger)', borderColor: 'var(--status-danger)' }}
+                  >
+                    Clear All Operational Data
+                  </button>
+                )}
               </div>
             </div>
-          </div>
+          )}
         </div>
       )}
     </div>
