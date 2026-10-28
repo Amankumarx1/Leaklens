@@ -9,7 +9,8 @@
     "client"
   ],
   "scripts": {
-    "dev": "npm --prefix server run dev",
+    "start": "node scripts/start.js",
+    "dev": "node scripts/dev.js",
     "dev:server": "npm --prefix server run dev",
     "dev:client": "npm --prefix client run dev",
     "build:client": "npm --prefix client run build",

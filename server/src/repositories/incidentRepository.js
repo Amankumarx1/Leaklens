@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { executeQuery, checkDatabaseHealth } from '../database/connection.js';
 import memoryStore from './memoryStore.js';
+import cacheService from '../services/cache/cacheService.js';
 
 /**
  * Incident Repository
@@ -96,6 +97,7 @@ export async function createIncident({
       }
     }
 
+    cacheService.invalidatePattern('analytics:');
     return getIncidentById(incidentId);
   }
 
@@ -159,6 +161,7 @@ export async function createIncident({
     created_at: now
   });
 
+  cacheService.invalidatePattern('analytics:');
   return getIncidentById(incidentId);
 }
 

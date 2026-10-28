@@ -3,6 +3,7 @@ import { CANONICAL_RULES } from './rules/ruleDefinitions.js';
 import { isAllowlisted } from './rules/falsePositiveAllowlist.js';
 import { isValidLuhn } from './validators/luhnValidator.js';
 import { isValidVerhoeff } from './validators/verhoeffValidator.js';
+import { isValidIban } from './validators/ibanValidator.js';
 import { calculateShannonEntropy } from './validators/entropyCalculator.js';
 import { evaluateConfidence } from './validators/contextEvaluator.js';
 
@@ -23,14 +24,16 @@ const CONFIDENCE_WEIGHT = {
 // Generic fallback rules that yield to specialized provider rules when overlapping
 const GENERIC_CATEGORIES = new Set([
   'API_KEY_CANDIDATE',
-  'HIGH_ENTROPY_SECRET'
+  'HIGH_ENTROPY_SECRET',
+  'PASSWORD_CREDENTIAL'
 ]);
 
 /**
  * Advanced Sensitive-Data Detection Engine
  * Evaluates active rules against parsed file items, performs algorithmic checksum validation
- * (Luhn, Verhoeff), assesses Shannon entropy, enforces false-positive allowlists, evaluates
- * contextual confidence, resolves overlapping candidate spans, and masks all sensitive content.
+ * (Luhn, Verhoeff, IBAN Mod-97), assesses Shannon entropy, enforces false-positive allowlists,
+ * evaluates contextual confidence, performs multi-pass Base64 decoded stream analysis, resolves
+ * overlapping candidate spans, and masks all sensitive content.
  *
  * @param {Array<{ location: string, content: string, field_path?: string }>} items - Parsed file segments
  * @param {Array<object>} [customRules] - Optional override rules (defaults to CANONICAL_RULES)
@@ -48,25 +51,109 @@ const GENERIC_CATEGORIES = new Set([
  * }>}
  */
 export function scanItems(items, customRules = null) {
-  const activeRules = (customRules || CANONICAL_RULES).filter(r => r.is_enabled);
+  const activeRules = (customRules || CANONICAL_RULES).filter(r => r.is_enabled && r.pattern);
+  
+  // Pre-compile regular expressions ONCE per scan execution instead of inside nested loops
+  const compiledRules = activeRules.map(rule => {
+    const flags = rule.pattern.flags || '';
+    const globalFlags = flags.includes('g') ? flags : flags + 'g';
+    return {
+      rule,
+      regex: new RegExp(rule.pattern.source, globalFlags)
+    };
+  });
+
+  // Multi-pass Base64 Stream Extraction:
+  // Detects base64 encoded strings in manifests, environment files, and configs,
+  // decodes them safely in memory, and passes the decoded stream for deep inspection.
+  const allItemsToScan = [...items];
+  const BASE64_PATTERN = /[A-Za-z0-9+/]{32,}={0,2}/g;
+
+  for (const item of items) {
+    if (!item.content || typeof item.content !== 'string' || item.content.length < 32) continue;
+
+    BASE64_PATTERN.lastIndex = 0;
+    let b64Match;
+    let b64Idx = 1;
+
+    while ((b64Match = BASE64_PATTERN.exec(item.content)) !== null) {
+      const b64Candidate = b64Match[0];
+      if (b64Candidate.length % 4 !== 0 || b64Candidate.length > 32768) continue;
+
+      try {
+        const decodedBuf = Buffer.from(b64Candidate, 'base64');
+        const decodedStr = decodedBuf.toString('utf8');
+
+        // Verify decoded content contains predominantly printable ASCII/whitespace
+        const printableMatches = decodedStr.match(/[\x20-\x7E\r\n\t]/g);
+        const printableRatio = printableMatches ? printableMatches.length / decodedStr.length : 0;
+
+        if (printableRatio >= 0.85 && decodedStr.length >= 10 && decodedStr !== b64Candidate) {
+          allItemsToScan.push({
+            location: `${item.location} [base64-decoded #${b64Idx}]`,
+            content: decodedStr,
+            field_path: item.field_path ? `${item.field_path}.[b64_decoded_${b64Idx}]` : null
+          });
+          b64Idx++;
+        }
+      } catch (_e) {
+        // Ignore unparseable binary streams
+      }
+    }
+  }
+
+  // Multi-pass URL-Decoded Stream Extraction:
+  // Decodes percent-encoded query parameters and access logs carrying obscured credentials.
+  for (const item of items) {
+    if (!item.content || typeof item.content !== 'string' || !item.content.includes('%')) continue;
+
+    if (/%[0-9A-Fa-f]{2}/.test(item.content)) {
+      try {
+        const decoded = decodeURIComponent(item.content.replace(/\+/g, ' '));
+        if (decoded && decoded !== item.content && decoded.length >= 8) {
+          allItemsToScan.push({
+            location: `${item.location} [url-decoded]`,
+            content: decoded,
+            field_path: item.field_path ? `${item.field_path}.[url_decoded]` : null
+          });
+        }
+      } catch (_e) {
+        try {
+          const sanitized = item.content.replace(/%(?![0-9A-Fa-f]{2})/g, '%25');
+          const decoded = decodeURIComponent(sanitized.replace(/\+/g, ' '));
+          if (decoded && decoded !== item.content && decoded.length >= 8) {
+            allItemsToScan.push({
+              location: `${item.location} [url-decoded]`,
+              content: decoded,
+              field_path: item.field_path ? `${item.field_path}.[url_decoded]` : null
+            });
+          }
+        } catch (_err) {
+          // Ignore invalid URL-encoding
+        }
+      }
+    }
+  }
+
   const finalFindings = [];
   const seenDedupKeys = new Set();
 
-  for (const item of items) {
-    if (!item.content || typeof item.content !== 'string') continue;
+  for (const item of allItemsToScan) {
+    if (!item.content || typeof item.content !== 'string' || item.content.length === 0) continue;
 
     const itemCandidates = [];
 
-    for (const rule of activeRules) {
-      if (!rule.pattern) continue;
-
-      // Create fresh regex instance to avoid stateful lastIndex bugs
-      const regex = new RegExp(rule.pattern.source, rule.pattern.flags || 'g');
+    for (const { rule, regex } of compiledRules) {
+      // Reset stateful index cleanly before scanning this item
+      regex.lastIndex = 0;
       let match;
 
       while ((match = regex.exec(item.content)) !== null) {
         const rawMatchedText = match[0];
-        if (!rawMatchedText) break; // Avoid infinite loop on zero-width match
+        if (!rawMatchedText) {
+          regex.lastIndex++; // Advance index to avoid zero-width match loop
+          break;
+        }
 
         const matchIndex = match.index;
         const matchLength = rawMatchedText.length;
@@ -79,6 +166,10 @@ export function scanItems(items, customRules = null) {
         } else if (rule.validatorName === 'verhoeff') {
           if (!isValidVerhoeff(rawMatchedText)) {
             continue; // Suppress random 12-digit numbers failing Aadhaar Verhoeff
+          }
+        } else if (rule.validatorName === 'iban') {
+          if (!isValidIban(rawMatchedText)) {
+            continue; // Suppress random strings failing ISO 7064 Mod-97 check
           }
         }
 

@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { executeQuery, checkDatabaseHealth } from '../database/connection.js';
 import memoryStore from './memoryStore.js';
+import cacheService from '../services/cache/cacheService.js';
 
 export async function createScanJob({ scan_id, created_by, status = 'in_progress' }) {
   const id = scan_id || crypto.randomUUID();
@@ -31,6 +32,7 @@ export async function createScanJob({ scan_id, created_by, status = 'in_progress
     });
   }
 
+  cacheService.invalidatePattern('analytics:');
   return { scan_id: id, status, started_at: now };
 }
 
@@ -72,14 +74,12 @@ export async function createFileRecord({ file_id, scan_id, original_filename, bl
 
 export async function createFindingsBatch(file_id, findings = []) {
   if (!findings || findings.length === 0) return [];
-  const createdFindings = [];
   const now = new Date().toISOString();
 
-  const dbHealth = await checkDatabaseHealth();
-
-  for (const finding of findings) {
+  // Prepare normalized records
+  const preparedRecords = findings.map(finding => {
     const finding_id = crypto.randomUUID();
-    const findingRecord = {
+    return {
       finding_id,
       file_id,
       rule_id: finding.rule_id,
@@ -90,31 +90,56 @@ export async function createFindingsBatch(file_id, findings = []) {
       severity: finding.severity,
       confidence: finding.confidence || 'high',
       status: finding.status || 'detected',
-      detected_at: now
-    };
-
-    if (dbHealth.isHealthy) {
-      await executeQuery(
-        `INSERT INTO leaklens.findings (finding_id, file_id, rule_id, location_reference, field_path, masked_excerpt, secret_fingerprint, severity, confidence, status, detected_at)
-         VALUES (@finding_id, @file_id, @rule_id, @location_reference, @field_path, @masked_excerpt, @secret_fingerprint, @severity, @confidence, @status, @detected_at)`,
-        findingRecord
-      );
-    } else {
-      memoryStore.findings.push({
-        ...findingRecord,
-        rule_name: finding.rule_name,
-        category: finding.category
-      });
-    }
-
-    createdFindings.push({
-      ...findingRecord,
+      detected_at: now,
       rule_name: finding.rule_name,
       category: finding.category
-    });
+    };
+  });
+
+  const dbHealth = await checkDatabaseHealth();
+
+  if (dbHealth.isHealthy) {
+    // Multi-row batched insert (chunks of 50 to avoid parameter ceiling)
+    const CHUNK_SIZE = 50;
+    for (let i = 0; i < preparedRecords.length; i += CHUNK_SIZE) {
+      const chunk = preparedRecords.slice(i, i + CHUNK_SIZE);
+      const valuesClauses = [];
+      const params = {};
+
+      chunk.forEach((rec, idx) => {
+        valuesClauses.push(
+          `(@f_id_${idx}, @file_id_${idx}, @r_id_${idx}, @loc_${idx}, @field_${idx}, @mask_${idx}, @fp_${idx}, @sev_${idx}, @conf_${idx}, @stat_${idx}, @det_${idx})`
+        );
+        params[`f_id_${idx}`] = rec.finding_id;
+        params[`file_id_${idx}`] = rec.file_id;
+        params[`r_id_${idx}`] = rec.rule_id;
+        params[`loc_${idx}`] = rec.location_reference;
+        params[`field_${idx}`] = rec.field_path;
+        params[`mask_${idx}`] = rec.masked_excerpt;
+        params[`fp_${idx}`] = rec.secret_fingerprint;
+        params[`sev_${idx}`] = rec.severity;
+        params[`conf_${idx}`] = rec.confidence;
+        params[`stat_${idx}`] = rec.status;
+        params[`det_${idx}`] = rec.detected_at;
+      });
+
+      const batchSql = `
+        INSERT INTO leaklens.findings (
+          finding_id, file_id, rule_id, location_reference, field_path,
+          masked_excerpt, secret_fingerprint, severity, confidence, status, detected_at
+        ) VALUES ${valuesClauses.join(',\n')}
+      `;
+
+      await executeQuery(batchSql, params);
+    }
+  } else {
+    for (const rec of preparedRecords) {
+      memoryStore.findings.push(rec);
+    }
   }
 
-  return createdFindings;
+  cacheService.invalidatePattern('analytics:');
+  return preparedRecords;
 }
 
 export async function updateScanStatus(scan_id, { status, error_code = null }) {
@@ -307,6 +332,7 @@ export async function clearAllScanData() {
   memoryStore.incident_findings = [];
   memoryStore.remediation_actions = [];
   memoryStore.audit_logs = [];
+  cacheService.clear();
 
   return { cleared: true };
 }

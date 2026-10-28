@@ -9,7 +9,7 @@ export function isValidLuhn(numberString) {
 
   // Clean non-digits (spaces and hyphens)
   const digits = numberString.replace(/[\s-]/g, '');
-  if (!/^\d{13,19}$/.test(digits)) return false;
+  if (!/^\d{9,19}$/.test(digits)) return false;
 
   let sum = 0;
   let alternate = false;

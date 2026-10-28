@@ -13,6 +13,7 @@ All answers cite actual codebase symbols, database schemas, API routes, and arch
 4. [Category D: DP-900 & Azure Data Engineering](#category-d-dp-900--azure-data-engineering)
 5. [Category E: Cloud Security, Cryptography & Compliance](#category-e-cloud-security-cryptography--compliance)
 6. [Category F: Deep Implementation & Source Code Tracing](#category-f-deep-implementation--source-code-tracing)
+7. [Category G: Government Sector Benefits & Sovereign Governance](#category-g-government-sector-benefits--sovereign-governance)
 
 ---
 
@@ -163,6 +164,30 @@ LeakLens features **Dual-Mode Architectural Resilience**:
 - In `server/src/config/azure.js` and `server/src/repositories/findingRepository.js`, connection health checks test external database/blob connectivity.
 - If `DB_HOST` or Azure Managed Identity endpoints are unavailable (or in local offline testing), the repository layer seamlessly transitions to an in-memory transactional mock store (`memoryStore.js`).
 - Readiness probes (`GET /health/ready`) report dependency status (`database: "connected" | "degraded"`), allowing App Service orchestrators or load balancers to route traffic safely.
+
+---
+
+## Category G: Government Sector Benefits & Sovereign Governance
+
+*(Refer to [`government-and-governance-viva.md`](./government-and-governance-viva.md) for full statutory analysis)*
+
+### Q17: How does LeakLens assist government organizations with the Digital Personal Data Protection (DPDP) Act 2023 and CERT-In directives?
+**Answer:**  
+1. **DPDP Act 2023 Section 8(5) & 8(6):** Mandates that Data Fiduciaries maintain reasonable security safeguards against data breaches. LeakLens detects citizen PII (PAN, Aadhaar, Passports, Driving Licenses) in development assets, configurations, and exports before deployment, and masks them immediately in volatile memory so plaintext citizen identifiers are never persisted.
+2. **CERT-In 6-Hour Reporting Mandate:** Pre-aggregated views (`vw_incident_analytics`) and indexed audit timestamps (`SYSUTCDATETIME()`) provide immediate, queryable forensic timelines for mandatory incident notification.
+3. **180-Day Log Retention:** The relational `leaklens.audit_logs` table provides an immutable record of all operational actions and detections.
+
+### Q18: How does LeakLens address third-party IT vendor and supply chain risk for digital governance projects?
+**Answer:**  
+Government digital stacks (e.g., e-Governance portals, municipal systems, PSU platforms) frequently rely on external systems integrators (SIs) and contracted development agencies. Contractors often inadvertently hardcode cloud master keys or database credentials into source code, Kubernetes manifests, or deployment scripts. LeakLens acts as an automated security gateway in CI/CD pipelines, using multi-pass Base64 and URL-decoding to expose obfuscated credentials (Azure Storage keys, GCP Service Accounts, Vault tokens, AWS keys) before code is merged into production environments.
+
+### Q19: Why are algorithmic checksums (Verhoeff for Aadhaar, ISO 7064 Mod-97 for IBAN, Luhn for Canadian SIN) vital in public sector security?
+**Answer:**  
+Basic regex scanners produce massive false-positive volumes because any arbitrary 12-digit or 16-digit number matches a generic numeric pattern, creating severe alert fatigue in government Security Operations Centers (SOCs). LeakLens implements **algorithmic mathematical checksum validation**:
+- **Aadhaar Verhoeff Checksum:** Employs the Dihedral group $D_5$ algorithm to verify authentic 12-digit UIDAI sequences.
+- **IBAN ISO 7064 Mod-97:** Enforces country length rules and piecewise Mod-97 division to validate international bank account structures.
+- **Luhn Mod-10 Checksum:** Validates Canadian Social Insurance Numbers and payment cards.
+This ensures only genuine citizen PII and financial identifiers generate incidents.
 
 ---
 

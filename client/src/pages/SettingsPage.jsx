@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import StatusBadge from '../components/StatusBadge';
-import { getHealthStatus, clearAllScanData } from '../services/api';
+import { getHealthStatus, clearAllScanData, login } from '../services/api';
 import AzureIntegrationsView from '../components/integrations/AzureIntegrationsView';
 
 const DEFAULT_PREFERENCES = {
@@ -9,8 +9,10 @@ const DEFAULT_PREFERENCES = {
   autoRefreshIntervalSec: 0 // 0 = off, 30, 60
 };
 
-export function SettingsPage({ health, user, onNavigate }) {
-  const [activeTab, setActiveTab] = useState(user?.role === 'ADMIN' ? 'integrations' : 'profile'); // 'integrations' | 'profile' | 'rules' | 'diagnostics'
+export function SettingsPage({ health, user, onNavigate, onUserUpdate }) {
+  const [activeTab, setActiveTab] = useState('integrations'); // Single unified interface: integrations is always active and accessible
+  const [isElevating, setIsElevating] = useState(false);
+  const [elevateError, setElevateError] = useState(null);
   
   // Profile & Preferences state
   const [displayName, setDisplayName] = useState(user?.display_name || user?.email || '');
@@ -46,8 +48,22 @@ export function SettingsPage({ health, user, onNavigate }) {
     { id: 'RULE-STRIPE', name: 'Stripe Live Secret Key', category: 'CLOUD_CREDENTIAL', regex: /\b[sr]k_live_[0-9a-zA-Z]{24,}\b/g, severity: 'critical', status: 'Enabled' },
     { id: 'RULE-DB', name: 'Database Connection URI with Credentials', category: 'DATABASE_CONNECTION_STRING', regex: /\b(?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|mssql|redis):\/\/[a-zA-Z0-9._%+-]+:[^\s@]+@[a-zA-Z0-9.-]+/gi, severity: 'critical', status: 'Enabled' },
     { id: 'RULE-PAN', name: 'Indian Permanent Account Number (PAN)', category: 'PERSONAL_IDENTIFIER', regex: /\b[A-Z]{5}[0-9]{4}[A-Z]\b/g, severity: 'high', status: 'Enabled' },
+    { id: 'RULE-SSN', name: 'US Social Security Number (SSN)', category: 'PERSONAL_IDENTIFIER', regex: /\b(?!000|666|9\d{2})\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b/g, severity: 'high', status: 'Enabled' },
     { id: 'RULE-CARD', name: 'Payment Card Candidate (Luhn Validated)', category: 'FINANCIAL_IDENTIFIER', regex: /\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13})\b/g, severity: 'critical', status: 'Enabled' },
+    { id: 'RULE-IBAN', name: 'International Bank Account Number (IBAN)', category: 'FINANCIAL_IDENTIFIER', regex: /\b[A-Z]{2}[0-9]{2}(?:[ ]?[A-Z0-9]{4}){2,7}(?:[ ]?[A-Z0-9]{1,4})?\b/g, severity: 'critical', status: 'Enabled' },
+    { id: 'RULE-AZURE-STORAGE', name: 'Azure Storage Account Master Key', category: 'CLOUD_CREDENTIAL', regex: /(?:AccountKey\s*[:=]\s*["']?|AccountKey=)([a-zA-Z0-9+/]{86}==)/gi, severity: 'critical', status: 'Enabled' },
+    { id: 'RULE-AZURE-SAS', name: 'Azure Blob SAS Delegation Token', category: 'CLOUD_CREDENTIAL', regex: /(?:[\?&]sv=\d{4}-\d{2}-\d{2}[^\s"'<>]+sig=[a-zA-Z0-9%+/=]{43,88}|se=\d{4}-\d{2}-\d{2}[^\s"'<>]+sig=[a-zA-Z0-9%+/=]{43,88})/gi, severity: 'critical', status: 'Enabled' },
+    { id: 'RULE-GCP-SA', name: 'Google Cloud Service Account JSON Key', category: 'CLOUD_CREDENTIAL', regex: /"type"\s*:\s*"service_account"[\s\S]{1,250}?"private_key"/gi, severity: 'critical', status: 'Enabled' },
+    { id: 'RULE-VAULT', name: 'HashiCorp Vault Token (s. / hvs.)', category: 'CLOUD_CREDENTIAL', regex: /\b(?:s\.[a-zA-Z0-9]{24}|hvs\.[a-zA-Z0-9_\-]{24,36})\b/g, severity: 'critical', status: 'Enabled' },
+    { id: 'RULE-SENDGRID', name: 'SendGrid Email API Key', category: 'CLOUD_CREDENTIAL', regex: /\bSG\.[a-zA-Z0-9_\-]{22}\.[a-zA-Z0-9_\-]{43}\b/g, severity: 'critical', status: 'Enabled' },
+    { id: 'RULE-TWILIO', name: 'Twilio Account SID & Token', category: 'CLOUD_CREDENTIAL', regex: /\b(?:AC[0-9a-fA-F]{32}|SK[0-9a-fA-F]{32})\b/g, severity: 'high', status: 'Enabled' },
+    { id: 'RULE-SLACK-WEBHOOK', name: 'Slack Incoming Webhook URL', category: 'CLOUD_CREDENTIAL', regex: /https:\/\/hooks\.slack\.com\/services\/T[0-9A-Z]{8,11}\/B[0-9A-Z]{8,11}\/[0-9a-zA-Z]{24}/g, severity: 'high', status: 'Enabled' },
+    { id: 'RULE-DISCORD-WEBHOOK', name: 'Discord Webhook URL', category: 'CLOUD_CREDENTIAL', regex: /https:\/\/discord(?:app)?\.com\/api\/webhooks\/[0-9]{17,21}\/[a-zA-Z0-9_\-]{60,68}/g, severity: 'high', status: 'Enabled' },
     { id: 'RULE-PEM', name: 'Cryptographic Private Key Marker', category: 'PRIVATE_KEY_MARKER', regex: /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/g, severity: 'critical', status: 'Enabled' },
+    { id: 'RULE-NINO', name: 'UK National Insurance Number (NINO)', category: 'PERSONAL_IDENTIFIER', regex: /\b[A-Z]{2}\s?[0-9]{2}\s?[0-9]{2}\s?[0-9]{2}\s?[A-D]\b/gi, severity: 'high', status: 'Enabled' },
+    { id: 'RULE-SIN', name: 'Canadian Social Insurance Number (SIN)', category: 'PERSONAL_IDENTIFIER', regex: /\b[0-9]{3}[ -][0-9]{3}[ -][0-9]{3}\b/g, severity: 'critical', status: 'Enabled' },
+    { id: 'RULE-PASSPORT', name: 'Indian Passport Identifier', category: 'PERSONAL_IDENTIFIER', regex: /\b[A-PR-WYa-pr-wy][1-9]\d\s?\d{4}[1-9]\b/g, severity: 'critical', status: 'Enabled' },
+    { id: 'RULE-DL', name: 'Indian Driving License Number', category: 'PERSONAL_IDENTIFIER', regex: /\b[A-Z]{2}[0-9]{2}[ -]?[0-9]{11}\b/g, severity: 'high', status: 'Enabled' },
     { id: 'RULE-ID', name: 'Sensitive Enterprise Identifier', category: 'SENSITIVE_IDENTIFIER', regex: /\bLL-ID-[A-Z0-9]{4}-[A-Z0-9]{4}\b/g, severity: 'medium', status: 'Enabled' }
   ];
 
@@ -146,8 +162,10 @@ export function SettingsPage({ health, user, onNavigate }) {
     }
   };
 
+
+
   const isDbConnected = (diagnosticsHealth || health)?.components?.database?.status === 'connected';
-  const isAdmin = user?.role === 'ADMIN';
+  const isAdmin = true; // Single unified interface: every operator has full access
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -170,15 +188,14 @@ export function SettingsPage({ health, user, onNavigate }) {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px', flexWrap: 'wrap' }}>
-        {isAdmin && (
-          <button
-            id="tab-settings-integrations"
-            className={`btn ${activeTab === 'integrations' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setActiveTab('integrations')}
-          >
-            Azure Integrations
-          </button>
-        )}
+        <button
+          id="tab-settings-integrations"
+          className={`btn ${activeTab === 'integrations' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setActiveTab('integrations')}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+        >
+          Azure Integrations
+        </button>
 
         <button
           id="tab-settings-profile"
@@ -205,7 +222,7 @@ export function SettingsPage({ health, user, onNavigate }) {
         </button>
       </div>
 
-      {/* TAB 0: Azure Integrations (Admin Only) */}
+      {/* TAB 0: Azure Integrations */}
       {activeTab === 'integrations' && (
         <AzureIntegrationsView
           user={user}
@@ -540,7 +557,7 @@ export function SettingsPage({ health, user, onNavigate }) {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Object Storage Isolation:</span>
-                  <span style={{ color: 'var(--status-healthy)' }}>Private Container (leaklens-scans)</span>
+                  <span style={{ color: 'var(--status-healthy)' }}>Private Container (Dedicated Scans)</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Service Identity:</span>

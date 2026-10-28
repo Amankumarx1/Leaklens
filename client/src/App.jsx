@@ -216,7 +216,7 @@ export function App() {
       case 'audit-logs':
         return <AuditLogsPage />;
       case 'settings':
-        return <SettingsPage health={health} user={user} onNavigate={handleNavigate} />;
+        return <SettingsPage health={health} user={user} onNavigate={handleNavigate} onUserUpdate={setUser} />;
       case 'analytics':
         return <AnalyticsPage onNavigate={handleNavigate} />;
       default:

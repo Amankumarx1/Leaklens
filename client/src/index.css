@@ -277,12 +277,10 @@ body {
 
 /* Floating Top Header */
 .app-header {
-  background: var(--glass-surface);
-  backdrop-filter: var(--glass-blur-heavy);
-  -webkit-backdrop-filter: var(--glass-blur-heavy);
-  border: 1px solid var(--border-glass);
+  background: #ffffff;
+  border: 1px solid var(--border-glass-strong);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-glass);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
   padding: 16px 28px;
   display: flex;
   justify-content: space-between;

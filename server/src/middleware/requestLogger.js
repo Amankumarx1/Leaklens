@@ -1,7 +1,10 @@
+import crypto from 'crypto';
+
 /**
  * Security-Conscious Request Logger Middleware
  * Logs incoming HTTP transactions without recording passwords, tokens,
  * authorization headers, or sensitive file data.
+ * Sets X-Request-ID and X-Response-Time headers for telemetry correlation.
  */
 
 const SENSITIVE_KEYS = new Set([
@@ -49,6 +52,22 @@ function sanitizeObject(obj) {
 export function requestLogger(req, res, next) {
   const start = process.hrtime();
   const timestamp = new Date().toISOString();
+
+  // Attach and propagate correlation request ID
+  const requestId = req.headers['x-request-id'] || crypto.randomUUID();
+  req.id = requestId;
+  res.setHeader('X-Request-ID', requestId);
+
+  // Hook writeHead to inject accurate X-Response-Time before headers are flushed
+  const originalWriteHead = res.writeHead;
+  res.writeHead = function (...args) {
+    if (!res.headersSent) {
+      const [seconds, nanoseconds] = process.hrtime(start);
+      const durationMs = (seconds * 1000 + nanoseconds / 1e6).toFixed(2);
+      res.setHeader('X-Response-Time', `${durationMs}ms`);
+    }
+    return originalWriteHead.apply(this, args);
+  };
 
   // Redact incoming headers
   const sanitizedHeaders = { ...req.headers };

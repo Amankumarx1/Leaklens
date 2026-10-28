@@ -77,6 +77,15 @@ export function maskSensitiveIdentifier(identifier) {
  */
 export function maskCloudCredential(token) {
   if (!token || typeof token !== 'string') return '[MASKED CLOUD CREDENTIAL]';
+  if (token.includes('AccountKey=')) {
+    return token.replace(/(AccountKey\s*=\s*)[^;"']+/gi, '$1***[MASKED_AZURE_KEY]***');
+  }
+  if (token.includes('sig=')) {
+    return token.replace(/sig=[^&"'\s]+/gi, 'sig=***[MASKED_SAS]***');
+  }
+  if (token.includes('"type"') && token.includes('service_account')) {
+    return '[MASKED GCP SERVICE ACCOUNT KEY]';
+  }
   if (token.startsWith('AKIA')) {
     return `AKIA***${token.slice(-4)}`;
   }
@@ -85,6 +94,39 @@ export function maskCloudCredential(token) {
   }
   if (token.startsWith('github_pat_')) {
     return `github_pat_***${token.slice(-4)}`;
+  }
+  if (token.startsWith('glpat-')) {
+    return `glpat-***${token.slice(-4)}`;
+  }
+  if (token.startsWith('npm_')) {
+    return `npm_***${token.slice(-4)}`;
+  }
+  if (token.startsWith('pypi-')) {
+    return `pypi-***${token.slice(-6)}`;
+  }
+  if (token.startsWith('dckr_pat_')) {
+    return `dckr_pat_***${token.slice(-4)}`;
+  }
+  if (token.startsWith('SG.')) {
+    return `SG.***${token.slice(-4)}`;
+  }
+  if (token.startsWith('s.')) {
+    return `s.***${token.slice(-4)}`;
+  }
+  if (token.startsWith('hvs.')) {
+    return `hvs.***${token.slice(-4)}`;
+  }
+  if (token.startsWith('AC') || token.startsWith('SK')) {
+    return `${token.slice(0, 2)}***${token.slice(-4)}`;
+  }
+  if (token.startsWith('sq0atp-') || token.startsWith('sq0csp-')) {
+    return `sq0***${token.slice(-4)}`;
+  }
+  if (token.startsWith('key-') && token.length >= 24) {
+    return `key-***${token.slice(-4)}`;
+  }
+  if (token.includes('hooks.slack.com') || token.includes('discord.com/api/webhooks')) {
+    return token.replace(/(\/services\/|\/webhooks\/)[^\s]+/i, '$1***[MASKED_WEBHOOK]***');
   }
   if (token.startsWith('sk_live_') || token.startsWith('rk_live_')) {
     return `sk_live_***${token.slice(-4)}`;
@@ -109,11 +151,19 @@ export function maskConnectionString(connStr) {
 }
 
 /**
- * Masks payment card numbers while preserving first 4 and last 4 digits (PCI DSS compliant).
+ * Masks payment card numbers and IBAN identifiers.
  * e.g., '4111222233334444' -> '4111-****-****-4444'
+ * e.g., 'GB82WEST12345698765432' -> 'GB82 **** **** **** **5432'
  */
 export function maskPaymentCard(cardNumber) {
-  if (!cardNumber || typeof cardNumber !== 'string') return '[MASKED PAYMENT CARD]';
+  if (!cardNumber || typeof cardNumber !== 'string') return '[MASKED FINANCIAL IDENTIFIER]';
+  const clean = cardNumber.replace(/\s+/g, '').toUpperCase();
+
+  // IBAN: 2 letters, 2 digits + alphanumeric body
+  if (/^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$/.test(clean)) {
+    return `${clean.slice(0, 4)} **** **** **** **${clean.slice(-4)}`;
+  }
+
   const digits = cardNumber.replace(/[\s-]/g, '');
   if (digits.length < 12) return '****-****-****';
   const first4 = digits.slice(0, 4);
@@ -122,15 +172,41 @@ export function maskPaymentCard(cardNumber) {
 }
 
 /**
- * Masks personal identifiers including Indian PAN, Aadhaar, and IFSC.
+ * Masks personal identifiers including Indian PAN, Aadhaar, IFSC, US SSN, UK NINO, Canadian SIN, and Passports.
  */
 export function maskPersonalIdentifier(idStr) {
   if (!idStr || typeof idStr !== 'string') return '[MASKED ID]';
   const clean = idStr.trim();
 
+  // US SSN: 3 digits, 2 digits, 4 digits -> ***-**-1234
+  if (/^\d{3}-\d{2}-\d{4}$/.test(clean)) {
+    return `***-**-${clean.slice(-4)}`;
+  }
+
+  // Canadian SIN: 3 digits, 3 digits, 3 digits -> ***-***-123
+  if (/^\d{3}[ -]\d{3}[ -]\d{3}$/.test(clean)) {
+    return `***-***-${clean.replace(/[\s-]/g, '').slice(-3)}`;
+  }
+
+  // UK NINO: 2 letters, 6 digits, 1 letter -> AB***12C
+  if (/^[A-Z]{2}\s?[0-9]{2}\s?[0-9]{2}\s?[0-9]{2}\s?[A-D]$/i.test(clean)) {
+    const compact = clean.replace(/\s/g, '');
+    return `${compact.slice(0, 2)}***${compact.slice(-3)}`;
+  }
+
   // PAN: 5 letters, 4 digits, 1 letter -> e.g. ABCDE***F
   if (/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(clean)) {
     return `${clean.slice(0, 4)}***${clean.slice(-2)}`;
+  }
+
+  // Indian Passport: 1 letter, 7 digits -> A1***567
+  if (/^[A-PR-WYa-pr-wy][1-9]\d\s?\d{4}[1-9]$/.test(clean)) {
+    return `${clean.slice(0, 2)}***${clean.slice(-3)}`;
+  }
+
+  // Indian Driving License: 2 letters, 2 digits, 11 digits -> DL04***1234
+  if (/^[A-Z]{2}[0-9]{2}[ -]?[0-9]{11}$/.test(clean)) {
+    return `${clean.slice(0, 4)}***${clean.slice(-4)}`;
   }
 
   // Aadhaar: 12 digits -> e.g. **** **** 1234

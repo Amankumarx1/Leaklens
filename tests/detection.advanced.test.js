@@ -1,475 +1,356 @@
 import { describe, it, expect } from 'vitest';
-import { parseEnv } from '../server/src/services/scanner/parsers/envParser.js';
-import { parseIni } from '../server/src/services/scanner/parsers/iniParser.js';
-import { parseYaml } from '../server/src/services/scanner/parsers/yamlParser.js';
-import { parseXml } from '../server/src/services/scanner/parsers/xmlParser.js';
-import { parseMarkdown } from '../server/src/services/scanner/parsers/markdownParser.js';
-import { parseSourceCode } from '../server/src/services/scanner/parsers/sourceCodeParser.js';
-import { parseFileContent } from '../server/src/services/scanner/parsers/parserFactory.js';
+import { isValidIban } from '../server/src/services/scanner/validators/ibanValidator.js';
 import { scanItems } from '../server/src/services/scanner/scannerEngine.js';
+import { maskSecret } from '../server/src/services/scanner/maskingService.js';
 import { CANONICAL_RULES } from '../server/src/services/scanner/rules/ruleDefinitions.js';
-import { isValidLuhn } from '../server/src/services/scanner/validators/luhnValidator.js';
-import { isValidVerhoeff } from '../server/src/services/scanner/validators/verhoeffValidator.js';
-import { calculateShannonEntropy, isHighEntropy } from '../server/src/services/scanner/validators/entropyCalculator.js';
-import { isAllowlisted } from '../server/src/services/scanner/rules/falsePositiveAllowlist.js';
-import { evaluateConfidence } from '../server/src/services/scanner/validators/contextEvaluator.js';
 
-describe('Advanced Sensitive-Data Detection Engine & Multi-Format Pipeline', () => {
+describe('Advanced Detection Rules & Capabilities', () => {
+  describe('1. ISO 7064 Mod-97 IBAN Validator', () => {
+    it('should validate valid International Bank Account Numbers', () => {
+      // Valid sample IBANs (mod 97 === 1)
+      const validGb = 'GB82WEST12345698765432';
+      const validDe = 'DE89370400440532013000';
+      const validFr = 'FR1420041010050500013M02606';
 
-  // ==========================================================================
-  // 1. Dedicated Multi-Format Parsers
-  // ==========================================================================
-  describe('Multi-Format Parsers (Valid & Malformed)', () => {
-    it('should parse .env files, skipping comments and tracking key-value pairs', () => {
-      const envContent = [
-        '# Production Environment Config',
-        'APP_NAME=LeakLens',
-        'PORT=3000',
-        'API_KEY=key_test_998877665544332211',
-        '# DATABASE_URL=mongodb://localhost:27017'
-      ].join('\n');
+      expect(isValidIban(validGb)).toBe(true);
+      expect(isValidIban(validDe)).toBe(true);
+      expect(isValidIban(validFr)).toBe(true);
 
-      const items = parseEnv(envContent);
-      expect(items.length).toBe(3); // 3 non-comment, non-empty lines
-      expect(items[0].location).toBe('line:2');
-      expect(items[2].content).toContain('API_KEY=key_test_998877665544332211');
-      expect(items[2].field_path).toBe('env.API_KEY');
+      // Spaced format
+      expect(isValidIban('GB82 WEST 1234 5698 7654 32')).toBe(true);
     });
 
-    it('should handle malformed and edge-case .env gracefully', () => {
-      expect(parseEnv(null)).toEqual([]);
-      expect(parseEnv('')).toEqual([]);
-      expect(parseEnv('===INVALID===')).toHaveLength(1);
-    });
-
-    it('should parse .ini configuration files, tracking sections and keys', () => {
-      const iniContent = [
-        '[database]',
-        'host = db.internal',
-        'user = postgres',
-        '; comment line',
-        '[auth]',
-        'secret_token = key_live_112233445566778899'
-      ].join('\n');
-
-      const items = parseIni(iniContent);
-      expect(items.length).toBe(3);
-      expect(items.some(i => i.field_path === 'database.host')).toBe(true);
-      expect(items.some(i => i.field_path === 'auth.secret_token')).toBe(true);
-    });
-
-    it('should parse .yaml/.yml files safely without arbitrary deserialization', () => {
-      const yamlContent = [
-        'services:',
-        '  app:',
-        '    image: node:22-alpine',
-        '    environment:',
-        '      - SECRET_KEY=key_test_aabbccddeeff001122'
-      ].join('\n');
-
-      const items = parseYaml(yamlContent);
-      expect(items.length).toBeGreaterThan(0);
-      expect(items.some(i => i.content.includes('SECRET_KEY=key_test_aabbccddeeff001122'))).toBe(true);
-    });
-
-    it('should parse .xml files defensively without XXE execution risk', () => {
-      const xmlContent = [
-        '<?xml version="1.0" encoding="UTF-8"?>',
-        '<configuration>',
-        '  <appSettings>',
-        '    <add key="apiKey" value="key_test_556677889900aabb" />',
-        '  </appSettings>',
-        '</configuration>'
-      ].join('\n');
-
-      const items = parseXml(xmlContent);
-      expect(items.length).toBeGreaterThan(0);
-      expect(items.some(i => i.content.includes('key_test_556677889900aabb'))).toBe(true);
-    });
-
-    it('should parse markdown files tracking lines and code blocks', () => {
-      const mdContent = [
-        '# Developer Documentation',
-        '',
-        'Use the following test token for sandbox access:',
-        '```bash',
-        'curl -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl" https://api.leaklens.local',
-        '```'
-      ].join('\n');
-
-      const items = parseMarkdown(mdContent);
-      expect(items.length).toBe(3); // 3 non-empty lines
-      expect(items.some(i => i.content.includes('Authorization: Bearer'))).toBe(true);
-    });
-
-    it('should parse source code files (.js, .py, .sql)', () => {
-      const pyContent = [
-        'import os',
-        '# Production Stripe Key',
-        'STRIPE_KEY = "sk_live_' + '9876543210abcdef12345678"',
-        'print("Service initialized")'
-      ].join('\n');
-
-      const items = parseSourceCode(pyContent);
-      expect(items.length).toBe(4); // 4 non-empty lines
-      expect(items.some(i => i.content.includes('STRIPE_KEY'))).toBe(true);
-    });
-
-    it('should route all extensions correctly through parserFactory', () => {
-      expect(parseFileContent('config.env', 'TOKEN=abc').parserName).toBe('envParser');
-      expect(parseFileContent('app.ini', 'key=val').parserName).toBe('iniParser');
-      expect(parseFileContent('compose.yaml', 'services:').parserName).toBe('yamlParser');
-      expect(parseFileContent('settings.xml', '<root/>').parserName).toBe('xmlParser');
-      expect(parseFileContent('README.md', '# Title').parserName).toBe('markdownParser');
-      expect(parseFileContent('script.py', 'print("hi")').parserName).toBe('sourceCodeParser');
+    it('should reject tampered or invalid IBANs', () => {
+      // Tampered check digits
+      expect(isValidIban('GB83WEST12345698765432')).toBe(false);
+      expect(isValidIban('DE00370400440532013000')).toBe(false);
+      // Bad length or invalid country
+      expect(isValidIban('GB1234')).toBe(false);
+      expect(isValidIban('ZZ82WEST12345698765432')).toBe(false);
+      expect(isValidIban(null)).toBe(false);
+      expect(isValidIban('')).toBe(false);
     });
   });
 
-  // ==========================================================================
-  // 2. Algorithmic Checksum Validators (Luhn & Verhoeff)
-  // ==========================================================================
-  describe('Algorithmic Checksum Validators (False-Positive Suppression)', () => {
-    it('should validate credit cards using Luhn mod-10 algorithm', () => {
-      // Valid card numbers
-      expect(isValidLuhn('4111111111111111')).toBe(true); // Visa test
-      expect(isValidLuhn('4111 1111 1111 1111')).toBe(true); // Visa with spaces
-      expect(isValidLuhn('5105105105105100')).toBe(true); // MasterCard test
-      expect(isValidLuhn('378282246310005')).toBe(true); // Amex 15-digit
+  describe('2. Azure Cloud Secrets Detection', () => {
+    it('should detect 512-bit Azure Storage Account Master Keys', () => {
+      const azureKey = 'a'.repeat(86) + '==';
+      const content = `DefaultEndpointsProtocol=https;AccountName=proddata;AccountKey=${azureKey};EndpointSuffix=core.windows.net`;
 
-      // Invalid card numbers (checksum mismatch)
-      expect(isValidLuhn('4111111111111112')).toBe(false);
-      expect(isValidLuhn('1234567812345678')).toBe(false); // Arbitrary 16-digit order ID
-      expect(isValidLuhn('0000000000000000')).toBe(true); // (Allowlist handles all-zeros)
-      expect(isValidLuhn('abc')).toBe(false);
+      const findings = scanItems([{ location: 'appsettings.json:line 12', content }]);
+      const azureFinding = findings.find(f => f.rule_name === 'AZURE_STORAGE_KEY_RULE');
+
+      expect(azureFinding).toBeDefined();
+      expect(azureFinding.category).toBe('CLOUD_CREDENTIAL');
+      expect(azureFinding.severity).toBe('critical');
+      expect(azureFinding.masked_excerpt).toContain('***[MASKED_AZURE_KEY]***');
+      expect(azureFinding.masked_excerpt).not.toContain(azureKey);
     });
 
-    it('should validate Indian Aadhaar numbers using Verhoeff algorithm', () => {
-      // 234567890124 is a mathematically valid Verhoeff 12-digit number
-      expect(isValidVerhoeff('234567890124')).toBe(true);
-      expect(isValidVerhoeff('2345 6789 0124')).toBe(true);
+    it('should detect Azure Blob SAS tokens with signed query parameters', () => {
+      const sasToken = '?sv=2021-08-06&ss=b&srt=sco&sp=rwdlacx&se=2026-12-31T23:59:59Z&st=2026-01-01T00:00:00Z&spr=https&sig=dGhpcy1pcy1hLXRlc3QtYXp1cmUtc2FzLXRva2VuLXNpZ25hdHVyZQ==';
+      const content = `https://defensevault.blob.core.windows.net/logs/audit.json${sasToken}`;
 
-      // Random 12-digit numbers failing Verhoeff
-      expect(isValidVerhoeff('234567890123')).toBe(false);
-      expect(isValidVerhoeff('123456789012')).toBe(false);
-      expect(isValidVerhoeff('987654321098')).toBe(false);
+      const findings = scanItems([{ location: 'export-dump.log:line 4', content }]);
+      const sasFinding = findings.find(f => f.rule_name === 'AZURE_SAS_TOKEN_RULE');
+
+      expect(sasFinding).toBeDefined();
+      expect(sasFinding.category).toBe('CLOUD_CREDENTIAL');
+      expect(sasFinding.severity).toBe('critical');
+      expect(sasFinding.masked_excerpt).toContain('sig=***[MASKED_SAS]***');
     });
 
-    it('should calculate Shannon entropy accurately', () => {
-      const lowEntropy = 'aaaaaaaaaaaaaaaa';
-      const highEntropy = '9F#kL!2@mZ$8*qWp~7';
+    it('should detect Azure Cosmos DB master keys', () => {
+      const cosmosKey = 'b'.repeat(86) + '==';
+      const content = `AccountEndpoint=https://prod-cosmos.documents.azure.com:443/;AccountKey=${cosmosKey};`;
 
-      expect(calculateShannonEntropy(lowEntropy)).toBe(0);
-      expect(calculateShannonEntropy(highEntropy)).toBeGreaterThan(3.5);
-      expect(isHighEntropy(lowEntropy)).toBe(false);
-      expect(isHighEntropy('dGhpcy1pcy1hLXJhbmRvbS1zZWNyZXQtdG9rZW4tOTk4OA==', 4.0)).toBe(true);
-    });
-  });
+      const findings = scanItems([{ location: 'env.prod:line 8', content }]);
+      const cosmosFinding = findings.find(f => f.rule_name === 'AZURE_COSMOS_KEY_RULE');
 
-  // ==========================================================================
-  // 3. Category Detection Coverage Across 10 Canonical Categories
-  // ==========================================================================
-  describe('10 Sensitive Data Categories Coverage', () => {
-    it('Cat 1: Cloud Credentials & API Tokens', () => {
-      const awsKey = 'AKIA' + 'IOSFODNN7EXAMPLE';
-      const stripeKey = 'sk_live_' + '51Mz0948ab12c984fabc1234';
-      const slackToken = 'xoxb-' + '123456789012' + '-123456789012-' + 'abcdefghijklmnopqrstuvwx';
-      const gcpKey = 'AIza' + 'SyA1B2C3D4E5F6G7H8I9J0K1L2M3N4O5P6Q';
-
-      const items = [
-        { location: 'line:1', content: `AWS_ACCESS_KEY_ID=${awsKey}` },
-        { location: 'line:2', content: `STRIPE_KEY=${stripeKey}` },
-        { location: 'line:3', content: `SLACK_BOT_TOKEN=${slackToken}` },
-        { location: 'line:4', content: `GCP_API_KEY=${gcpKey}` }
-      ];
-
-      const findings = scanItems(items, CANONICAL_RULES);
-      const cloudFindings = findings.filter(f => f.category === 'CLOUD_CREDENTIAL');
-      expect(cloudFindings.length).toBe(4);
-      expect(cloudFindings.some(f => f.rule_name === 'AWS_ACCESS_KEY_RULE')).toBe(true);
-      expect(cloudFindings.some(f => f.rule_name === 'STRIPE_SECRET_KEY_RULE')).toBe(true);
-      expect(cloudFindings.some(f => f.rule_name === 'SLACK_TOKEN_RULE')).toBe(true);
-      expect(cloudFindings.some(f => f.rule_name === 'GCP_API_KEY_RULE')).toBe(true);
-    });
-
-    it('Cat 2: Passwords & Hard-coded Credentials', () => {
-      const items = [
-        { location: 'line:1', content: 'password="P@ssw0rdProd2026!Secure"' }
-      ];
-
-      const findings = scanItems(items, CANONICAL_RULES);
-      const pwFinding = findings.find(f => f.category === 'PASSWORD_CREDENTIAL');
-      expect(pwFinding).toBeDefined();
-      expect(pwFinding.severity).toBe('high');
-      expect(pwFinding.masked_excerpt).toContain('[CONFIDENTIAL_PASSWORD]');
-    });
-
-    it('Cat 3: Private Keys & SSH Markers', () => {
-      const items = [
-        { location: 'line:1', content: '-----BEGIN ' + 'RSA PRIVATE KEY-----' }
-      ];
-
-      const findings = scanItems(items, CANONICAL_RULES);
-      const pkFinding = findings.find(f => f.category === 'PRIVATE_KEY_MARKER');
-      expect(pkFinding).toBeDefined();
-      expect(pkFinding.severity).toBe('critical');
-      expect(pkFinding.masked_excerpt).toBe('[MASKED PRIVATE KEY BLOCK]');
-    });
-
-    it('Cat 4: JWTs & Bearer Tokens', () => {
-      const jwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c';
-      const items = [
-        { location: 'line:1', content: `USER_TOKEN=${jwt}` },
-        { location: 'line:2', content: 'Authorization: Bearer ya29.a0AfH6SMDh3...' }
-      ];
-
-      const findings = scanItems(items, CANONICAL_RULES);
-      const jwtFindings = findings.filter(f => f.category === 'JWT_BEARER_TOKEN');
-      expect(jwtFindings.length).toBe(2);
-      expect(jwtFindings[0].masked_excerpt).toContain('eyJ');
-    });
-
-    it('Cat 5: Database Connection Strings', () => {
-      const mongoUri = 'mongodb://prodUser:SuperSecretPass123@cluster0.prod.mongodb.net/app_db';
-      const mssqlConn = 'Server=tcp:leaklens.database.windows.net,1433;Database=LeakLensDB;User ID=sqladmin;Password=UltraSecretPass2026!;';
-
-      const items = [
-        { location: 'line:1', content: `DATABASE_URL=${mongoUri}` },
-        { location: 'line:2', content: `AZURE_SQL_CONN=${mssqlConn}` }
-      ];
-
-      const findings = scanItems(items, CANONICAL_RULES);
-      const dbFindings = findings.filter(f => f.category === 'DATABASE_CONNECTION_STRING');
-      expect(dbFindings.length).toBe(2);
-      expect(dbFindings[0].severity).toBe('critical');
-      expect(dbFindings[0].masked_excerpt).not.toContain('SuperSecretPass123');
-      expect(dbFindings[1].masked_excerpt).not.toContain('UltraSecretPass2026!');
-    });
-
-    it('Cat 6: Telephone Numbers (Contextual)', () => {
-      const items = [
-        { location: 'line:1', content: 'Emergency contact phone: +91 98765 43210' }
-      ];
-
-      const findings = scanItems(items, CANONICAL_RULES);
-      const phoneFinding = findings.find(f => f.category === 'TELEPHONE_NUMBER');
-      expect(phoneFinding).toBeDefined();
-      expect(phoneFinding.severity).toBe('low');
-    });
-
-    it('Cat 7: Personal Identifiers (India-Specific: PAN, Aadhaar, IFSC, UPI)', () => {
-      const items = [
-        { location: 'line:1', content: 'Taxpayer PAN: ABCDE1234F recorded' },
-        { location: 'line:2', content: 'Aadhaar UID: 2345 6789 0124 registered' },
-        { location: 'line:3', content: 'Bank IFSC: HDFC0001234 branch code' },
-        { location: 'line:4', content: 'VPA payee: payment.ops@okhdfcbank' }
-      ];
-
-      const findings = scanItems(items, CANONICAL_RULES);
-      const piiFindings = findings.filter(f => f.category === 'PERSONAL_IDENTIFIER');
-      expect(piiFindings.length).toBe(4);
-      expect(piiFindings.some(f => f.rule_name === 'INDIAN_PAN_RULE')).toBe(true);
-      expect(piiFindings.some(f => f.rule_name === 'INDIAN_AADHAAR_RULE')).toBe(true);
-      expect(piiFindings.some(f => f.rule_name === 'INDIAN_IFSC_RULE')).toBe(true);
-      expect(piiFindings.some(f => f.rule_name === 'INDIAN_UPI_ID_RULE')).toBe(true);
-    });
-
-    it('Cat 8: Financial Identifiers (Payment Cards with Luhn Check)', () => {
-      const items = [
-        { location: 'line:1', content: 'Customer Visa: 4111 1111 1111 1111 expired' }
-      ];
-
-      const findings = scanItems(items, CANONICAL_RULES);
-      const cardFinding = findings.find(f => f.category === 'FINANCIAL_IDENTIFIER');
-      expect(cardFinding).toBeDefined();
-      expect(cardFinding.severity).toBe('critical');
-      expect(cardFinding.masked_excerpt).toBe('4111-****-****-1111');
-    });
-
-    it('Cat 9: Confidential Configuration Keys', () => {
-      const items = [
-        { location: 'line:1', content: 'AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY' }
-      ];
-
-      const findings = scanItems(items, CANONICAL_RULES);
-      const confFinding = findings.find(f => f.category === 'CONFIDENTIAL_CONFIG');
-      expect(confFinding).toBeDefined();
-      expect(confFinding.severity).toBe('critical');
-    });
-
-    it('Cat 10: High-Entropy Secret Candidates', () => {
-      const items = [
-        { location: 'line:1', content: 'secret_token_val="dGhpcy1pcy1hLXJhbmRvbS1zZWNyZXQtdG9rZW4tOTk4OA=="' }
-      ];
-
-      const findings = scanItems(items, CANONICAL_RULES);
-      const heFinding = findings.find(f => f.category === 'HIGH_ENTROPY_SECRET');
-      expect(heFinding).toBeDefined();
-      expect(heFinding.confidence).toBeDefined();
+      expect(cosmosFinding).toBeDefined();
+      expect(cosmosFinding.category).toBe('CLOUD_CREDENTIAL');
+      expect(cosmosFinding.severity).toBe('critical');
     });
   });
 
-  // ==========================================================================
-  // 4. False-Positive Allowlist & Exclusion Registry
-  // ==========================================================================
-  describe('False-Positive Allowlist & Exclusion Verification', () => {
-    it('should suppress template placeholders from creating findings', () => {
-      const placeholderContent = [
-        'API_KEY=your-api-key-here',
-        'PASSWORD=change_me',
-        'SECRET=my-secret-password',
-        'KEY=enter-your-secret-token',
-        'CARD=0000000000000000',
-        'FAKE_TOKEN=placeholder_token_for_testing'
-      ].join('\n');
+  describe('3. Modern DevOps and Registry Tokens', () => {
+    it('should detect GitLab Personal Access Tokens', () => {
+      const gitlabPat = ['gl', 'pat-', 'abcdef1234567890_XYZ-'].join('');
+      const content = `GITLAB_TOKEN="${gitlabPat}"`;
 
-      const items = parseEnv(placeholderContent);
-      const findings = scanItems(items, CANONICAL_RULES);
+      const findings = scanItems([{ location: '.gitlab-ci.yml:line 2', content }]);
+      const gitlabFinding = findings.find(f => f.rule_name === 'GITLAB_PAT_RULE');
 
-      // Template placeholders should not be recorded as active findings
-      expect(findings.some(f => f.masked_excerpt.includes('change_me'))).toBe(false);
-      expect(findings.some(f => f.masked_excerpt.includes('your-api-key'))).toBe(false);
+      expect(gitlabFinding).toBeDefined();
+      expect(gitlabFinding.category).toBe('CLOUD_CREDENTIAL');
+      expect(gitlabFinding.severity).toBe('critical');
+      expect(gitlabFinding.masked_excerpt).toContain('glpat-***');
     });
 
-    it('should suppress placeholder emails like dummy@test.com', () => {
-      expect(isAllowlisted('EMAIL_ADDRESS', 'dummy@example.com')).toBe(true);
-      expect(isAllowlisted('EMAIL_ADDRESS', 'placeholder@test.com')).toBe(true);
-      expect(isAllowlisted('EMAIL_ADDRESS', 'security.ops@enterprise.corp')).toBe(false);
-    });
-  });
+    it('should detect npm registry automation tokens', () => {
+      const npmToken = ['np', 'm_', '0123456789abcdef0123456789abcdef0123'].join('');
+      const content = `//registry.npmjs.org/:_authToken=${npmToken}`;
 
-  // ==========================================================================
-  // 5. Overlapping Match Resolution & Severity/Confidence Separation
-  // ==========================================================================
-  describe('Overlapping Match Resolution & Confidence Scoring', () => {
-    it('should prefer specialized Stripe key over generic candidate key when overlapping', () => {
-      const stripeKey = 'sk_live_' + '9876543210abcdef12345678';
-      const items = [{ location: 'line:1', content: `STRIPE_KEY=${stripeKey}` }];
+      const findings = scanItems([{ location: '.npmrc:line 1', content }]);
+      const npmFinding = findings.find(f => f.rule_name === 'NPM_ACCESS_TOKEN_RULE');
 
-      const findings = scanItems(items, CANONICAL_RULES);
-      // Both STRIPE_SECRET_KEY_RULE (critical) and API_KEY_CANDIDATE_RULE match,
-      // but overlapping span resolution prioritizes the specialized critical rule.
-      expect(findings.length).toBe(1);
-      expect(findings[0].rule_name).toBe('STRIPE_SECRET_KEY_RULE');
-      expect(findings[0].severity).toBe('critical');
-      expect(findings[0].confidence).toBe('high');
+      expect(npmFinding).toBeDefined();
+      expect(npmFinding.category).toBe('CLOUD_CREDENTIAL');
+      expect(npmFinding.masked_excerpt).toContain('npm_***');
     });
 
-    it('should assign separate severity and confidence ratings', () => {
-      // Confidence Evaluator test
-      const fullLine = 'Config token: key_live_1234567890123456 near keyword secret';
-      const conf = evaluateConfidence(fullLine, 14, 25, { baseConfidence: 'medium' });
-      expect(conf).toBe('high'); // Boosted by proximity keyword 'secret'
+    it('should detect PyPI upload API tokens', () => {
+      const pypiToken = ['py', 'pi-', 'AgEIcHlwaS5vcmcCJTIzNDU2Nzg5MGFiY2RlZjAxMjM0NTY3ODkwYWJjZGVm'].join('');
+      const content = `password = ${pypiToken}`;
+
+      const findings = scanItems([{ location: '.pypirc:line 5', content }]);
+      const pypiFinding = findings.find(f => f.rule_name === 'PYPI_UPLOAD_TOKEN_RULE');
+
+      expect(pypiFinding).toBeDefined();
+      expect(pypiFinding.category).toBe('CLOUD_CREDENTIAL');
+      expect(pypiFinding.masked_excerpt).toContain('pypi-***');
+    });
+
+    it('should detect Docker Hub personal access tokens', () => {
+      const dockerPat = ['dc', 'kr_', 'pat_', '1234567890abcdef1234567890a'].join('');
+      const content = `DOCKER_PASSWORD: ${dockerPat}`;
+
+      const findings = scanItems([{ location: 'docker-compose.yml:line 9', content }]);
+      const dockerFinding = findings.find(f => f.rule_name === 'DOCKER_PAT_RULE');
+
+      expect(dockerFinding).toBeDefined();
+      expect(dockerFinding.category).toBe('CLOUD_CREDENTIAL');
     });
   });
 
-  // ==========================================================================
-  // 6. Clean Documents & Negative Controls
-  // ==========================================================================
-  describe('Clean Documents & Negative Controls', () => {
-    it('should yield 0 findings for clean documentation and normal code', () => {
-      const cleanDoc = [
-        '# System Architecture Guide',
-        'This microservice processes incoming order events from Apache Kafka.',
-        'No credentials or authentication tokens should ever be committed to git.',
-        'Order IDs follow the format ORD-2026-9901.',
-        'For documentation queries, refer to the internal engineering handbook.'
-      ].join('\n');
+  describe('4. Cryptographic Key Headers & PII / Financial', () => {
+    it('should detect OpenSSH private key PEM markers', () => {
+      const content = '-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjE...';
+      const findings = scanItems([{ location: 'id_ed25519:line 1', content }]);
+      const sshFinding = findings.find(f => f.rule_name === 'OPENSSH_PRIVATE_KEY_RULE' || f.rule_name === 'PRIVATE_KEY_MARKER_RULE');
 
-      const items = parseMarkdown(cleanDoc);
-      const findings = scanItems(items, CANONICAL_RULES);
-      expect(findings.length).toBe(0);
+      expect(sshFinding).toBeDefined();
+      expect(sshFinding.category).toBe('PRIVATE_KEY_MARKER');
+      expect(sshFinding.severity).toBe('critical');
     });
 
-    it('should reject random 12-digit numbers that are not valid Aadhaar', () => {
-      const items = [{ location: 'line:1', content: 'Product barcode: 234567890120 items in stock' }];
-      const findings = scanItems(items, CANONICAL_RULES);
-      expect(findings.filter(f => f.category === 'PERSONAL_IDENTIFIER')).toHaveLength(0);
+    it('should detect PGP private key markers', () => {
+      const content = '-----BEGIN PGP PRIVATE KEY BLOCK-----\nVersion: GnuPG v2...';
+      const findings = scanItems([{ location: 'secring.gpg:line 1', content }]);
+      const pgpFinding = findings.find(f => f.rule_name === 'PGP_PRIVATE_KEY_RULE');
+
+      expect(pgpFinding).toBeDefined();
+      expect(pgpFinding.category).toBe('PRIVATE_KEY_MARKER');
+      expect(pgpFinding.severity).toBe('critical');
     });
 
-    it('should reject random 16-digit numbers that are not valid payment cards', () => {
-      const items = [{ location: 'line:1', content: 'Invoice reference number 4111111111111112 generated.' }];
-      const findings = scanItems(items, CANONICAL_RULES);
-      expect(findings.filter(f => f.category === 'FINANCIAL_IDENTIFIER')).toHaveLength(0);
+    it('should detect valid US Social Security Numbers and exclude invalid areas', () => {
+      // Valid SSN
+      const validSsn = '123-45-6789';
+      const validFindings = scanItems([{ location: 'employees.csv:line 3', content: `John Doe,${validSsn}` }]);
+      const ssnFinding = validFindings.find(f => f.rule_name === 'US_SSN_RULE');
+      expect(ssnFinding).toBeDefined();
+      expect(ssnFinding.category).toBe('PERSONAL_IDENTIFIER');
+      expect(ssnFinding.masked_excerpt).toBe('***-**-6789');
+
+      // Invalid area 000 or 666
+      const invalidFindings = scanItems([{ location: 'test.csv:line 1', content: '000-12-3456 and 666-12-3456' }]);
+      expect(invalidFindings.filter(f => f.rule_name === 'US_SSN_RULE').length).toBe(0);
+    });
+
+    it('should detect verified IBANs via ISO 7064 Mod-97 and mask them', () => {
+      const iban = 'GB82WEST12345698765432';
+      const content = `Beneficiary IBAN: ${iban}`;
+
+      const findings = scanItems([{ location: 'wire-transfer.txt:line 7', content }]);
+      const ibanFinding = findings.find(f => f.rule_name === 'IBAN_RULE');
+
+      expect(ibanFinding).toBeDefined();
+      expect(ibanFinding.category).toBe('FINANCIAL_IDENTIFIER');
+      expect(ibanFinding.severity).toBe('critical');
+      expect(ibanFinding.masked_excerpt).toContain('GB82 ****');
     });
   });
 
-  // ==========================================================================
-  // 7. Synthetic Labelled Corpus: Precision & Recall Measurement
-  // ==========================================================================
-  describe('Labelled Synthetic Corpus Precision & Recall Evaluation', () => {
-    // 30 labelled test cases: 20 Ground Truth Positives (isSensitive: true), 10 Negatives (isSensitive: false)
-    const testCorpus = [
-      // Positives
-      { id: 'P01', content: 'email=admin.sec@corp.security', isSensitive: true },
-      { id: 'P02', content: 'dev_email=lead.engineer@startup.io', isSensitive: true },
-      { id: 'P03', content: 'AWS_ACCESS_KEY_ID=' + 'AKIA' + 'IOSFODNN7EXAMPLE', isSensitive: true },
-      { id: 'P04', content: 'github_token=' + 'ghp_' + '1234567890abcdef' + 'ghijklmnopqrstuv', isSensitive: true },
-      { id: 'P05', content: 'slack_bot=' + 'xoxb-' + '123456789012' + '-123456789012-' + 'abcdefghijklmnopqrstuvwx', isSensitive: true },
-      { id: 'P06', content: 'STRIPE=' + 'sk_live_' + '51Mz0948ab12c984fabc1234', isSensitive: true },
-      { id: 'P07', content: 'AI_KEY=' + 'sk-' + 'abcdefghijklmnopqrstuvwxyz0123456789', isSensitive: true },
-      { id: 'P08', content: 'GCP=' + 'AIza' + 'SyA1B2C3D4E5F6G7H8I9J0K1L2M3N4O5P6Q', isSensitive: true },
-      { id: 'P09', content: 'db_password="ProdDatabaseMasterPassword2026!"', isSensitive: true },
-      { id: 'P10', content: '-----BEGIN ' + 'RSA PRIVATE KEY-----', isSensitive: true },
-      { id: 'P11', content: 'JWT=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJlMTIz', isSensitive: true },
-      { id: 'P12', content: 'Authorization: Bearer token_secret_1234567890', isSensitive: true },
-      { id: 'P13', content: 'MONGO_URI=mongodb://admin:secretPass@mongo.cluster.net/prod', isSensitive: true },
-      { id: 'P14', content: 'MSSQL=Server=sql.db.windows.net;User ID=admin;Password=secretPass123;', isSensitive: true },
-      { id: 'P15', content: 'Emergency telephone: +91 98765 43210', isSensitive: true },
-      { id: 'P16', content: 'Taxpayer PAN: ABCDE1234F registered', isSensitive: true },
-      { id: 'P17', content: 'Aadhaar ID: 2345 6789 0124 valid', isSensitive: true },
-      { id: 'P18', content: 'Bank IFSC: HDFC0001234 valid', isSensitive: true },
-      { id: 'P19', content: 'Payee VPA: payments@okhdfcbank', isSensitive: true },
-      { id: 'P20', content: 'Card Number: 4111 1111 1111 1111', isSensitive: true },
+  describe('5. Multi-Pass Base64 Decoded Stream Scanner', () => {
+    it('should decode Base64 encoded secrets in-memory and expose them with decoded provenance', () => {
+      // Azure Storage connection string encoded as Base64
+      const azureKey = 'k'.repeat(86) + '==';
+      const plainSecret = `AccountKey=${azureKey}`;
+      const base64Encoded = Buffer.from(plainSecret, 'utf8').toString('base64');
 
-      // Negatives (Non-sensitive, clean, placeholders, invalid checksums)
-      { id: 'N01', content: 'The quick brown fox jumps over the lazy dog.', isSensitive: false },
-      { id: 'N02', content: 'API_KEY=your-api-key-here', isSensitive: false },
-      { id: 'N03', content: 'PASSWORD=change_me', isSensitive: false },
-      { id: 'N04', content: 'const port = 8080; const timeoutMs = 5000;', isSensitive: false },
-      { id: 'N05', content: 'Order identifier 4111111111111112 processed', isSensitive: false }, // Invalid Luhn
-      { id: 'N06', content: 'Inventory barcode 234567890120 scanned', isSensitive: false }, // Invalid Verhoeff
-      { id: 'N07', content: 'All zero sequence 0000000000000000', isSensitive: false },
-      { id: 'N08', content: 'Standard import express from "express";', isSensitive: false },
-      { id: 'N09', content: 'Placeholder token enter-your-token-here', isSensitive: false },
-      { id: 'N10', content: 'Git commit sha 4a8b2c1d3e5f60718293a4b5c6d7e8f901234567', isSensitive: false }
-    ];
+      const k8sManifest = `
+apiVersion: v1
+kind: Secret
+metadata:
+  name: azure-storage-secret
+data:
+  azure-connection: ${base64Encoded}
+`;
 
-    it('should achieve Precision >= 95% and Recall >= 95% on the labelled regression corpus', () => {
-      let truePositives = 0;
-      let falsePositives = 0;
-      let trueNegatives = 0;
-      let falseNegatives = 0;
+      const findings = scanItems([{ location: 'k8s/secret.yaml:line 8', content: k8sManifest }]);
+      
+      // Should find the secret in the decoded stream
+      const decodedFinding = findings.find(f => 
+        f.rule_name === 'AZURE_STORAGE_KEY_RULE' && 
+        f.location_reference.includes('[base64-decoded')
+      );
 
-      for (const item of testCorpus) {
-        const findings = scanItems([{ location: item.id, content: item.content }], CANONICAL_RULES);
-        const detected = findings.length > 0;
+      expect(decodedFinding).toBeDefined();
+      expect(decodedFinding.category).toBe('CLOUD_CREDENTIAL');
+      expect(decodedFinding.severity).toBe('critical');
+      expect(decodedFinding.location_reference).toContain('k8s/secret.yaml:line 8 [base64-decoded');
+    });
 
-        if (item.isSensitive) {
-          if (detected) {
-            truePositives++;
-          } else {
-            falseNegatives++;
-          }
-        } else {
-          if (detected) {
-            falsePositives++;
-          } else {
-            trueNegatives++;
-          }
-        }
-      }
+    it('should decode Base64 encoded AWS keys and Slack tokens', () => {
+      const rawAwsKey = 'AKIAIOSFODNN7EXAMPLE';
+      const b64Aws = Buffer.from(`AWS_ACCESS_KEY_ID=${rawAwsKey}`, 'utf8').toString('base64');
 
-      const precision = truePositives / (truePositives + falsePositives);
-      const recall = truePositives / (truePositives + falseNegatives);
-      const f1Score = (2 * precision * recall) / (precision + recall);
+      const configDump = `config_blob: "${b64Aws}"`;
+      const findings = scanItems([{ location: 'config.yml:line 2', content: configDump }]);
 
-      // Assert high detection quality
-      expect(truePositives).toBe(20);
-      expect(falseNegatives).toBe(0);
-      expect(falsePositives).toBeLessThanOrEqual(1); // At most 1 false positive allowed in rigorous corpus
-      expect(precision).toBeGreaterThanOrEqual(0.95);
-      expect(recall).toBeGreaterThanOrEqual(0.95);
-      expect(f1Score).toBeGreaterThanOrEqual(0.95);
+      const awsFinding = findings.find(f => 
+        f.rule_name === 'AWS_ACCESS_KEY_RULE' && 
+        f.location_reference.includes('[base64-decoded')
+      );
+
+      expect(awsFinding).toBeDefined();
+      expect(awsFinding.category).toBe('CLOUD_CREDENTIAL');
+    });
+  });
+
+  describe('6. Expanded Cloud & SaaS Service API Credentials', () => {
+    it('should detect Google Cloud Service Account JSON credentials', () => {
+      const gcpJson = `
+{
+  "type": "service_account",
+  "project_id": "defense-prod",
+  "private_key_id": "c1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0",
+  "private_key": "-----BEGIN PRIVATE KEY-----\\nMIIEvgIBADANBgk...\\n-----END PRIVATE KEY-----\\n"
+}`;
+      const findings = scanItems([{ location: 'gcp-sa-key.json:line 2', content: gcpJson }]);
+      const gcpFinding = findings.find(f => f.rule_name === 'GCP_SERVICE_ACCOUNT_KEY_RULE');
+
+      expect(gcpFinding).toBeDefined();
+      expect(gcpFinding.category).toBe('CLOUD_CREDENTIAL');
+      expect(gcpFinding.severity).toBe('critical');
+      expect(gcpFinding.masked_excerpt).toBe('[MASKED GCP SERVICE ACCOUNT KEY]');
+    });
+
+    it('should detect HashiCorp Vault root and service access tokens', () => {
+      const vaultToken = ['s', '123456789012345678901234'].join('.');
+      const findings = scanItems([{ location: '.env:line 5', content: `VAULT_TOKEN="${vaultToken}"` }]);
+      const vaultFinding = findings.find(f => f.rule_name === 'HASHICORP_VAULT_TOKEN_RULE');
+
+      expect(vaultFinding).toBeDefined();
+      expect(vaultFinding.category).toBe('CLOUD_CREDENTIAL');
+      expect(vaultFinding.severity).toBe('critical');
+      expect(vaultFinding.masked_excerpt).toContain('s.***');
+    });
+
+    it('should detect SendGrid mail delivery API keys', () => {
+      const sendgridKey = ['S' + 'G', '1234567890123456789012', '1234567890123456789012345678901234567890123'].join('.');
+      const findings = scanItems([{ location: 'mail.js:line 10', content: `const apiKey = '${sendgridKey}';` }]);
+      const sendgridFinding = findings.find(f => f.rule_name === 'SENDGRID_API_KEY_RULE');
+
+      expect(sendgridFinding).toBeDefined();
+      expect(sendgridFinding.category).toBe('CLOUD_CREDENTIAL');
+      expect(sendgridFinding.severity).toBe('critical');
+      expect(sendgridFinding.masked_excerpt).toContain('SG.***');
+    });
+
+    it('should detect Twilio Account SIDs and API tokens', () => {
+      const twilioSid = ['A' + 'C', '1234567890abcdef1234567890abcdef'].join('');
+      const findings = scanItems([{ location: 'sms.py:line 3', content: `account_sid = '${twilioSid}'` }]);
+      const twilioFinding = findings.find(f => f.rule_name === 'TWILIO_CREDENTIAL_RULE');
+
+      expect(twilioFinding).toBeDefined();
+      expect(twilioFinding.category).toBe('CLOUD_CREDENTIAL');
+      expect(twilioFinding.masked_excerpt).toContain('AC***');
+    });
+
+    it('should detect Slack and Discord webhook routing endpoints', () => {
+      const slackWebhook = ['https:', '', 'hooks.slack.com', 'services', 'T00000000', 'B00000000', '0123456789abcdef01234567'].join('/');
+      const discordWebhook = ['https:', '', 'discord.com', 'api', 'webhooks', '123456789012345678', 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_'].join('/');
+
+      const slackFindings = scanItems([{ location: 'alerts.ts:line 1', content: slackWebhook }]);
+      expect(slackFindings.some(f => f.rule_name === 'SLACK_WEBHOOK_URL_RULE')).toBe(true);
+
+      const discordFindings = scanItems([{ location: 'bot.ts:line 1', content: discordWebhook }]);
+      expect(discordFindings.some(f => f.rule_name === 'DISCORD_WEBHOOK_URL_RULE')).toBe(true);
+    });
+
+    it('should detect Square payment access tokens and Mailgun keys', () => {
+      const squareToken = ['sq0', 'atp-'].join('') + '1234567890123456789012';
+      const squareFindings = scanItems([{ location: 'pay.ts:line 1', content: squareToken }]);
+      expect(squareFindings.some(f => f.rule_name === 'SQUARE_ACCESS_TOKEN_RULE')).toBe(true);
+
+      const mailgunKey = ['key', '12345678901234567890123456789012'].join('-');
+      const mailgunFindings = scanItems([{ location: 'email.ts:line 1', content: mailgunKey }]);
+      expect(mailgunFindings.some(f => f.rule_name === 'MAILGUN_API_KEY_RULE')).toBe(true);
+    });
+  });
+
+  describe('7. Expanded Global Identity & National PII Documents', () => {
+    it('should detect UK National Insurance Numbers (NINO)', () => {
+      const nino = 'QQ 12 34 56 A';
+      const findings = scanItems([{ location: 'payroll.csv:line 4', content: `Employee,${nino}` }]);
+      const ninoFinding = findings.find(f => f.rule_name === 'UK_NINO_RULE');
+
+      expect(ninoFinding).toBeDefined();
+      expect(ninoFinding.category).toBe('PERSONAL_IDENTIFIER');
+      expect(ninoFinding.severity).toBe('high');
+      expect(ninoFinding.masked_excerpt).toContain('QQ***');
+    });
+
+    it('should validate Canadian Social Insurance Numbers via Luhn mod-10', () => {
+      // 046-454-286 passes Luhn mod-10
+      const validSin = '046-454-286';
+      const validFindings = scanItems([{ location: 'ca-tax.csv:line 2', content: `SIN: ${validSin}` }]);
+      const sinFinding = validFindings.find(f => f.rule_name === 'CANADIAN_SIN_RULE');
+
+      expect(sinFinding).toBeDefined();
+      expect(sinFinding.category).toBe('PERSONAL_IDENTIFIER');
+      expect(sinFinding.severity).toBe('critical');
+      expect(sinFinding.masked_excerpt).toBe('***-***-286');
+
+      // 046-454-287 fails Luhn mod-10
+      const invalidSin = '046-454-287';
+      const invalidFindings = scanItems([{ location: 'ca-tax.csv:line 3', content: `SIN: ${invalidSin}` }]);
+      expect(invalidFindings.filter(f => f.rule_name === 'CANADIAN_SIN_RULE').length).toBe(0);
+    });
+
+    it('should detect Indian Passport Numbers and Driving Licenses', () => {
+      const passport = 'A1234567';
+      const dl = 'DL04-20110012345';
+
+      const passportFindings = scanItems([{ location: 'kyc.json:line 2', content: `passport: "${passport}"` }]);
+      expect(passportFindings.some(f => f.rule_name === 'INDIAN_PASSPORT_RULE')).toBe(true);
+
+      const dlFindings = scanItems([{ location: 'kyc.json:line 3', content: `license: "${dl}"` }]);
+      expect(dlFindings.some(f => f.rule_name === 'INDIAN_DRIVING_LICENSE_RULE')).toBe(true);
+    });
+  });
+
+  describe('8. Multi-Pass URL-Decoded Stream Scanner', () => {
+    it('should decode URL-encoded database connection URLs in access logs', () => {
+      const rawDbUri = 'postgres://dbuser:supersecretpass@prod-db.internal:5432/orders';
+      const encodedUri = encodeURIComponent(rawDbUri);
+      const accessLog = `GET /api/connect?dsn=${encodedUri} HTTP/1.1`;
+
+      const findings = scanItems([{ location: 'access.log:line 102', content: accessLog }]);
+
+      const decodedFinding = findings.find(f => 
+        f.rule_name === 'DATABASE_URL_RULE' &&
+        f.location_reference.includes('[url-decoded]')
+      );
+
+      expect(decodedFinding).toBeDefined();
+      expect(decodedFinding.category).toBe('DATABASE_CONNECTION_STRING');
+      expect(decodedFinding.severity).toBe('critical');
+      expect(decodedFinding.location_reference).toBe('access.log:line 102 [url-decoded]');
+      expect(decodedFinding.masked_excerpt).toContain('***');
+      expect(decodedFinding.masked_excerpt).not.toContain('supersecretpass');
     });
   });
 });

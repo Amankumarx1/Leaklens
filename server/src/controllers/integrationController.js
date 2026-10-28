@@ -89,6 +89,61 @@ export async function testPowerBi(req, res) {
   }
 }
 
+export async function testAll(req, res) {
+  try {
+    const userId = req.user?.user_id || null;
+    const results = await azureIntegrationService.testAllIntegrations(userId);
+    return successResponse(res, results, 'All Azure integration tests completed.', 200);
+  } catch (err) {
+    const status = err.status || 500;
+    return errorResponse(res, err.message, err.code || 'TEST_ALL_ERROR', status);
+  }
+}
+
+export async function authorizeSql(req, res) {
+  try {
+    const userId = req.user?.user_id || null;
+    const result = await azureIntegrationService.authorizeSqlDatabase(userId, req.body || {});
+    return successResponse(res, result, 'Azure SQL authorization commands executed successfully.', 200);
+  } catch (err) {
+    const status = err.status || 500;
+    return errorResponse(res, err.message, err.code || 'SQL_AUTHORIZE_ERROR', status);
+  }
+}
+
+export async function assignBlobRole(req, res) {
+  try {
+    const userId = req.user?.user_id || null;
+    const result = await azureIntegrationService.assignBlobStorageRole(userId, req.body || {});
+    return successResponse(res, result, 'Storage Blob Data Contributor role assigned successfully.', 200);
+  } catch (err) {
+    const status = err.status || 500;
+    return errorResponse(res, err.message, err.code || 'BLOB_ROLE_ASSIGN_ERROR', status);
+  }
+}
+
+export async function assignKeyVaultRole(req, res) {
+  try {
+    const userId = req.user?.user_id || null;
+    const result = await azureIntegrationService.assignKeyVaultRole(userId, req.body || {});
+    return successResponse(res, result, 'Key Vault Secrets User role assigned successfully.', 200);
+  } catch (err) {
+    const status = err.status || 500;
+    return errorResponse(res, err.message, err.code || 'KEY_VAULT_ROLE_ASSIGN_ERROR', status);
+  }
+}
+
+export async function restartAppService(req, res) {
+  try {
+    const userId = req.user?.user_id || null;
+    const result = await azureIntegrationService.restartAppService(userId, req.body || {});
+    return successResponse(res, result, 'App Service environment synchronized and runtime reloaded.', 200);
+  } catch (err) {
+    const status = err.status || 500;
+    return errorResponse(res, err.message, err.code || 'APP_SERVICE_RESTART_ERROR', status);
+  }
+}
+
 export default {
   getIntegrations,
   getStatus,
@@ -96,5 +151,11 @@ export default {
   testSql,
   testBlob,
   testKeyVault,
-  testPowerBi
+  testPowerBi,
+  testAll,
+  authorizeSql,
+  assignBlobRole,
+  assignKeyVaultRole,
+  restartAppService
 };
+

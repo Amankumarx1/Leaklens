@@ -47,6 +47,17 @@ export function AzureSetupGuideModal({ onClose }) {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '22px', fontSize: '13px', color: 'var(--text-primary)' }}>
+          {/* In-Platform Feature Callout */}
+          <div style={{ padding: '14px 18px', background: 'linear-gradient(135deg, rgba(2, 132, 199, 0.1) 0%, rgba(16, 185, 129, 0.1) 100%)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(2, 132, 199, 0.3)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <span style={{ fontSize: '16px' }}>⚡</span>
+              <strong style={{ fontSize: '14px', color: 'var(--accent-cyan)' }}>Direct In-Platform Execution Available</strong>
+            </div>
+            <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              You do not need to switch between Azure Portal and SSMS. On the <strong>Azure Integrations</strong> page, you can fill in your cloud endpoints, execute database authorizations, assign IAM roles, apply runtime settings, and test all 5 integrations directly in-platform.
+            </p>
+          </div>
+
           {/* Step 1: Managed Identity */}
           <div style={{ padding: '16px', background: 'var(--bg-app)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
             <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--accent-cyan)', marginBottom: '8px' }}>
@@ -110,7 +121,7 @@ GRANT EXECUTE ON SCHEMA::leaklens TO [<your-app-service-name>];`}
               <li>Store sensitive values such as <code>SESSION-SECRET</code>.</li>
               <li>In App Service Configuration, reference secrets safely without embedding plaintext:
                 <div style={{ marginTop: '6px', fontFamily: 'var(--font-mono)', fontSize: '12px', background: 'rgba(0,0,0,0.04)', padding: '6px 10px', borderRadius: '4px' }}>
-                  @Microsoft.KeyVault(VaultName=kv-leaklens-prod;SecretName=SESSION-SECRET)
+                  @Microsoft.KeyVault(VaultName=&lt;your-key-vault&gt;;SecretName=SESSION-SECRET)
                 </div>
               </li>
             </ol>

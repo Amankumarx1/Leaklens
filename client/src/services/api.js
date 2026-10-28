@@ -289,6 +289,40 @@ export async function testPowerBiIntegration(reportUrl = null) {
   });
 }
 
+export async function testAllIntegrations() {
+  return request('/admin/integrations/test-all', {
+    method: 'POST'
+  });
+}
+
+export async function authorizeSqlIntegration(data = {}) {
+  return request('/admin/integrations/sql/authorize', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+}
+
+export async function assignBlobRoleIntegration(data = {}) {
+  return request('/admin/integrations/blob/assign-role', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+}
+
+export async function assignKeyVaultRoleIntegration(data = {}) {
+  return request('/admin/integrations/key-vault/assign-role', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+}
+
+export async function restartAppServiceIntegration(data = {}) {
+  return request('/admin/integrations/app-service/restart', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+}
+
 export default {
   login,
   logout,
@@ -325,6 +359,11 @@ export default {
   testBlobIntegration,
   testKeyVaultIntegration,
   testPowerBiIntegration,
+  testAllIntegrations,
+  authorizeSqlIntegration,
+  assignBlobRoleIntegration,
+  assignKeyVaultRoleIntegration,
+  restartAppServiceIntegration,
   setAuthToken,
   getAuthToken,
   API_BASE_URL

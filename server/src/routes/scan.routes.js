@@ -5,6 +5,7 @@ import scanController from '../controllers/scanController.js';
 import { authenticateToken, requireRole, ROLES } from '../middleware/auth.js';
 import { ALLOWED_EXTENSIONS } from '../services/scanner/parsers/parserFactory.js';
 import { errorResponse } from '../utils/apiResponse.js';
+import { scanUploadRateLimiter } from '../middleware/rateLimiter.js';
 
 const router = Router();
 
@@ -46,6 +47,7 @@ router.post(
   '/',
   authenticateToken,
   requireRole([ROLES.ADMIN, ROLES.ANALYST]),
+  scanUploadRateLimiter,
   (req, res, next) => {
     upload.single('file')(req, res, (err) => {
       if (err) return handleUploadErrors(err, req, res, next);

@@ -313,4 +313,67 @@ describe('Azure Integrations Settings & Connection Wizard Test Suite', () => {
       expect(validateKeyVaultInput('https://invalidvault.com').valid).toBe(false);
     });
   });
+
+  // ============================================================================
+  // 9. In-Platform Cloud Provisioning & Direct Execution
+  // ============================================================================
+  describe('In-Platform Cloud Provisioning & Execution Actions', () => {
+    it('POST /api/admin/integrations/sql/authorize should execute T-SQL external provider script and grant roles', async () => {
+      const res = await request(app)
+        .post('/api/admin/integrations/sql/authorize')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ appServiceName: 'leaklens-custom-app' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.script).toContain('CREATE USER [leaklens-custom-app] FROM EXTERNAL PROVIDER;');
+      expect(res.body.data.script).toContain('ALTER ROLE db_datareader ADD MEMBER [leaklens-custom-app];');
+      expect(res.body.data.script).toContain('ALTER ROLE db_datawriter ADD MEMBER [leaklens-custom-app];');
+      expect(res.body.data.script).toContain('GRANT EXECUTE ON SCHEMA::leaklens TO [leaklens-custom-app];');
+    });
+
+    it('POST /api/admin/integrations/blob/assign-role should assign Storage Blob Data Contributor', async () => {
+      const res = await request(app)
+        .post('/api/admin/integrations/blob/assign-role')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ appServiceName: 'leaklens-soc-prod', storageAccountName: 'leaklensscansprod' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.role).toBe('Storage Blob Data Contributor');
+      expect(res.body.data.accountName).toBe('leaklensscansprod');
+    });
+
+    it('POST /api/admin/integrations/key-vault/assign-role should assign Key Vault Secrets User', async () => {
+      const res = await request(app)
+        .post('/api/admin/integrations/key-vault/assign-role')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ appServiceName: 'leaklens-soc-prod', keyVaultUri: 'https://kv-leaklens-prod.vault.azure.net' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.role).toBe('Key Vault Secrets User');
+    });
+
+    it('POST /api/admin/integrations/app-service/restart should apply environment variables and reload runtime', async () => {
+      const res = await request(app)
+        .post('/api/admin/integrations/app-service/restart')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          appServiceName: 'leaklens-soc-prod',
+          sqlServer: 'leaklens-sql-server.database.windows.net',
+          sqlDatabase: 'LeakLensDB',
+          sqlAuthType: 'azure-active-directory-default',
+          storageAccountName: 'leaklensscansprod',
+          keyVaultUri: 'https://kv-leaklens-prod.vault.azure.net'
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.appliedVariables.DB_SERVER).toBe('leaklens-sql-server.database.windows.net');
+      expect(res.body.data.appliedVariables.DB_NAME).toBe('LeakLensDB');
+      expect(res.body.data.appliedVariables.AZURE_STORAGE_ACCOUNT_NAME).toBe('leaklensscansprod');
+      expect(res.body.data.appliedVariables.KEY_VAULT_URI).toBe('https://kv-leaklens-prod.vault.azure.net');
+    });
+  });
 });

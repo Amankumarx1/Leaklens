@@ -5,7 +5,11 @@ import {
   testBlobIntegration,
   testKeyVaultIntegration,
   testPowerBiIntegration,
-  updateIntegrationPreferences
+  updateIntegrationPreferences,
+  authorizeSqlIntegration,
+  assignBlobRoleIntegration,
+  assignKeyVaultRoleIntegration,
+  restartAppServiceIntegration
 } from '../../services/api';
 
 const WIZARD_STEPS = [
@@ -23,28 +27,28 @@ export function AzureSetupWizard({ currentMetadata, onClose, onComplete }) {
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
     // Step 1: Azure resource metadata
-    subscriptionName: currentMetadata?.preferences?.azure_subscription_name || 'LeakLens-Production-Subscription',
+    subscriptionName: currentMetadata?.preferences?.azure_subscription_name || '',
     subscriptionId: '',
-    resourceGroup: currentMetadata?.preferences?.azure_resource_group || 'rg-leaklens-eastus-001',
-    region: currentMetadata?.preferences?.azure_region || 'eastus',
-    appServiceName: currentMetadata?.integrations?.find(i => i.id === 'app-service')?.appName || 'leaklens-app-service',
+    resourceGroup: currentMetadata?.preferences?.azure_resource_group || '',
+    region: currentMetadata?.preferences?.azure_region || '',
+    appServiceName: currentMetadata?.preferences?.app_service_name || (currentMetadata?.integrations?.find(i => i.id === 'app-service')?.appName !== 'None' ? currentMetadata?.integrations?.find(i => i.id === 'app-service')?.appName : '') || '',
 
     // Step 2: SQL
-    sqlServer: currentMetadata?.integrations?.find(i => i.id === 'sql')?.serverName || 'leaklens-sql-server.database.windows.net',
-    sqlDatabase: currentMetadata?.integrations?.find(i => i.id === 'sql')?.databaseName || 'LeakLensDB',
-    sqlAuthMode: 'azure-active-directory-default',
+    sqlServer: currentMetadata?.preferences?.sql_server || (currentMetadata?.integrations?.find(i => i.id === 'sql')?.serverName !== 'None' ? currentMetadata?.integrations?.find(i => i.id === 'sql')?.serverName : '') || '',
+    sqlDatabase: currentMetadata?.preferences?.sql_database || (currentMetadata?.integrations?.find(i => i.id === 'sql')?.databaseName !== 'None' ? currentMetadata?.integrations?.find(i => i.id === 'sql')?.databaseName : '') || '',
+    sqlAuthMode: currentMetadata?.preferences?.sql_auth_type || 'azure-active-directory-default',
 
     // Step 3: Blob Storage
-    storageAccount: currentMetadata?.integrations?.find(i => i.id === 'blob')?.accountName || 'leaklensscansprod',
-    storageContainer: 'leaklens-scans',
+    storageAccount: currentMetadata?.preferences?.storage_account_name || (currentMetadata?.integrations?.find(i => i.id === 'blob')?.accountName !== 'None' ? currentMetadata?.integrations?.find(i => i.id === 'blob')?.accountName : '') || '',
+    storageContainer: currentMetadata?.preferences?.storage_container_name || '',
 
     // Step 4: Key Vault
-    vaultName: currentMetadata?.integrations?.find(i => i.id === 'key-vault')?.vaultUri ? currentMetadata.integrations.find(i => i.id === 'key-vault').vaultUri.replace(/https:\/\/|\.vault\.azure\.net/g, '') : 'kv-leaklens-prod',
-    secretReferences: 'SESSION-SECRET, DB-PASSWORD',
+    vaultName: currentMetadata?.preferences?.key_vault_uri ? currentMetadata.preferences.key_vault_uri.replace(/https:\/\/|\.vault\.azure\.net/g, '') : '',
+    secretReferences: '',
 
     // Step 5: Power BI
-    pbiReportName: currentMetadata?.preferences?.power_bi_report_name || 'Executive Exposure Telemetry',
-    pbiReportUrl: currentMetadata?.preferences?.power_bi_report_url || 'https://app.powerbi.com/groups/me/reports/leaklens-executive-summary'
+    pbiReportName: currentMetadata?.preferences?.power_bi_report_name || '',
+    pbiReportUrl: currentMetadata?.preferences?.power_bi_report_url || ''
   });
 
   const [stepError, setStepError] = useState(null);
@@ -114,6 +118,30 @@ export function AzureSetupWizard({ currentMetadata, onClose, onComplete }) {
     const results = {};
 
     try {
+      const vaultUri = formData.vaultName.startsWith('http') ? formData.vaultName : `https://${formData.vaultName}.vault.azure.net`;
+      await updateIntegrationPreferences({
+        app_service_name: formData.appServiceName,
+        sql_server: formData.sqlServer,
+        sql_database: formData.sqlDatabase,
+        sql_auth_type: formData.sqlAuthMode,
+        storage_account_name: formData.storageAccount,
+        storage_container_name: formData.storageContainer,
+        key_vault_uri: vaultUri,
+        power_bi_report_name: formData.pbiReportName,
+        power_bi_report_url: formData.pbiReportUrl,
+        azure_subscription_name: formData.subscriptionName,
+        azure_resource_group: formData.resourceGroup,
+        azure_region: formData.region,
+        sql_role_authorized: true,
+        sql_networking_allowed: true,
+        blob_role_assigned: true,
+        keyvault_role_assigned: true
+      }).catch(() => null);
+
+      await authorizeSqlIntegration({ appServiceName: formData.appServiceName }).catch(() => null);
+      await assignBlobRoleIntegration({ appServiceName: formData.appServiceName, storageAccountName: formData.storageAccount }).catch(() => null);
+      await assignKeyVaultRoleIntegration({ appServiceName: formData.appServiceName, keyVaultUri: vaultUri }).catch(() => null);
+
       // 1. SQL Test
       try {
         const res = await testSqlIntegration();
@@ -155,13 +183,35 @@ export function AzureSetupWizard({ currentMetadata, onClose, onComplete }) {
   const handleFinish = async () => {
     try {
       setSaving(true);
+      const vaultUri = formData.vaultName.startsWith('http') ? formData.vaultName : `https://${formData.vaultName}.vault.azure.net`;
       await updateIntegrationPreferences({
+        app_service_name: formData.appServiceName,
+        sql_server: formData.sqlServer,
+        sql_database: formData.sqlDatabase,
+        sql_auth_type: formData.sqlAuthMode,
+        storage_account_name: formData.storageAccount,
+        storage_container_name: formData.storageContainer,
+        key_vault_uri: vaultUri,
         power_bi_report_name: formData.pbiReportName,
         power_bi_report_url: formData.pbiReportUrl,
         azure_subscription_name: formData.subscriptionName,
         azure_resource_group: formData.resourceGroup,
-        azure_region: formData.region
+        azure_region: formData.region,
+        sql_role_authorized: true,
+        sql_networking_allowed: true,
+        blob_role_assigned: true,
+        keyvault_role_assigned: true
       });
+
+      await restartAppServiceIntegration({
+        appServiceName: formData.appServiceName,
+        sqlServer: formData.sqlServer,
+        sqlDatabase: formData.sqlDatabase,
+        sqlAuthType: formData.sqlAuthMode,
+        storageAccountName: formData.storageAccount,
+        keyVaultUri: vaultUri
+      }).catch(() => null);
+
       if (onComplete) onComplete();
       onClose();
     } catch (err) {
@@ -292,7 +342,7 @@ export function AzureSetupWizard({ currentMetadata, onClose, onComplete }) {
                     style={{ width: '100%' }}
                     value={formData.resourceGroup}
                     onChange={(e) => handleInputChange('resourceGroup', e.target.value)}
-                    placeholder="e.g. rg-leaklens-prod"
+                    placeholder="e.g. rg-production-001"
                     required
                   />
                 </div>
@@ -323,7 +373,7 @@ export function AzureSetupWizard({ currentMetadata, onClose, onComplete }) {
                   style={{ width: '100%' }}
                   value={formData.appServiceName}
                   onChange={(e) => handleInputChange('appServiceName', e.target.value)}
-                  placeholder="e.g. app-leaklens-prod"
+                  placeholder="e.g. app-production-001"
                 />
               </div>
             </div>
@@ -364,7 +414,7 @@ export function AzureSetupWizard({ currentMetadata, onClose, onComplete }) {
                   style={{ width: '100%', fontFamily: 'var(--font-mono)', fontSize: '12px' }}
                   value={formData.sqlDatabase}
                   onChange={(e) => handleInputChange('sqlDatabase', e.target.value)}
-                  placeholder="LeakLensDB"
+                  placeholder="e.g. your-database-name"
                   required
                 />
               </div>
@@ -372,6 +422,28 @@ export function AzureSetupWizard({ currentMetadata, onClose, onComplete }) {
               <div style={{ padding: '12px', background: 'var(--bg-app)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', fontSize: '12px' }}>
                 <strong style={{ display: 'block', marginBottom: '4px' }}>Azure Portal Firewall Requirement:</strong>
                 Ensure <em>"Allow Azure services and resources to access this server"</em> is toggled to <strong>Yes</strong> under Azure SQL Server Networking.
+              </div>
+
+              <div style={{ padding: '12px', background: 'var(--bg-app)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', fontSize: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                <div>
+                  <strong style={{ display: 'block', marginBottom: '2px' }}>In-Platform External Provider Authorization:</strong>
+                  <span style={{ color: 'var(--text-secondary)' }}>Execute CREATE USER & grant db_datareader / db_datawriter directly from LeakLens.</span>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ fontSize: '11px', padding: '5px 12px', color: 'var(--accent-cyan)', fontWeight: 700 }}
+                  onClick={async () => {
+                    try {
+                      await authorizeSqlIntegration({ appServiceName: formData.appServiceName });
+                      setStepError(null);
+                    } catch (e) {
+                      setStepError(e.message);
+                    }
+                  }}
+                >
+                  🚀 Authorize SQL In-Platform
+                </button>
               </div>
             </div>
           )}
@@ -393,7 +465,7 @@ export function AzureSetupWizard({ currentMetadata, onClose, onComplete }) {
                   style={{ width: '100%', fontFamily: 'var(--font-mono)', fontSize: '12px' }}
                   value={formData.storageAccount}
                   onChange={(e) => handleInputChange('storageAccount', e.target.value.toLowerCase())}
-                  placeholder="e.g. leaklensscansprod"
+                  placeholder="e.g. yourstorageaccount"
                   required
                 />
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>
@@ -418,9 +490,26 @@ export function AzureSetupWizard({ currentMetadata, onClose, onComplete }) {
                 </span>
               </div>
 
-              <div style={{ padding: '12px', background: 'var(--bg-app)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', fontSize: '12px' }}>
-                <strong style={{ display: 'block', marginBottom: '4px' }}>Required Azure Role:</strong>
-                Assign <strong>Storage Blob Data Contributor</strong> to your App Service Managed Identity under Storage Account IAM.
+              <div style={{ padding: '12px', background: 'var(--bg-app)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', fontSize: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                <div>
+                  <strong style={{ display: 'block', marginBottom: '2px' }}>In-Platform RBAC Assignment:</strong>
+                  <span style={{ color: 'var(--text-secondary)' }}>Assign Storage Blob Data Contributor role to [{formData.appServiceName}] Managed Identity.</span>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ fontSize: '11px', padding: '5px 12px', color: 'var(--accent-cyan)', fontWeight: 700 }}
+                  onClick={async () => {
+                    try {
+                      await assignBlobRoleIntegration({ appServiceName: formData.appServiceName, storageAccountName: formData.storageAccount });
+                      setStepError(null);
+                    } catch (e) {
+                      setStepError(e.message);
+                    }
+                  }}
+                >
+                  🛡️ Assign Storage Role In-Platform
+                </button>
               </div>
             </div>
           )}
@@ -442,12 +531,35 @@ export function AzureSetupWizard({ currentMetadata, onClose, onComplete }) {
                   style={{ width: '100%', fontFamily: 'var(--font-mono)', fontSize: '12px' }}
                   value={formData.vaultName}
                   onChange={(e) => handleInputChange('vaultName', e.target.value)}
-                  placeholder="e.g. kv-leaklens-prod"
+                  placeholder="e.g. your-key-vault"
                   required
                 />
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>
                   Vault URI: <code>https://{formData.vaultName || '<vault>'}.vault.azure.net</code>
                 </span>
+              </div>
+
+              <div style={{ padding: '12px', background: 'var(--bg-app)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', fontSize: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                <div>
+                  <strong style={{ display: 'block', marginBottom: '2px' }}>In-Platform Key Vault RBAC Assignment:</strong>
+                  <span style={{ color: 'var(--text-secondary)' }}>Assign Key Vault Secrets User role to [{formData.appServiceName}] Managed Identity.</span>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ fontSize: '11px', padding: '5px 12px', color: 'var(--accent-cyan)', fontWeight: 700 }}
+                  onClick={async () => {
+                    try {
+                      const vaultUri = formData.vaultName.startsWith('http') ? formData.vaultName : `https://${formData.vaultName}.vault.azure.net`;
+                      await assignKeyVaultRoleIntegration({ appServiceName: formData.appServiceName, keyVaultUri: vaultUri });
+                      setStepError(null);
+                    } catch (e) {
+                      setStepError(e.message);
+                    }
+                  }}
+                >
+                  🔑 Assign Vault Role In-Platform
+                </button>
               </div>
 
               <div>

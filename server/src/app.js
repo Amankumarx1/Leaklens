@@ -49,20 +49,43 @@ export function createApp() {
     next();
   });
 
-  // Strict CORS configuration
-  const allowedOrigins = env.CLIENT_URL ? [env.CLIENT_URL, 'http://localhost:5173'] : ['*'];
+  // Flexible & Secure Production/Local CORS configuration
+  const baseAllowed = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173'
+  ];
+  if (env.CLIENT_URL && !baseAllowed.includes(env.CLIENT_URL)) {
+    baseAllowed.push(env.CLIENT_URL);
+  }
+
   app.use(
     cors({
       origin: (origin, callback) => {
-        // Allow requests with no origin (like mobile apps, curl, same-origin)
-        if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+        // Allow requests with no origin (same-origin, curl, server-to-server)
+        if (!origin) return callback(null, true);
+
+        // Allow configured origins
+        if (baseAllowed.includes(origin) || baseAllowed.includes('*')) {
           return callback(null, true);
         }
+
+        // Allow any localhost/127.0.0.1 port in local/development mode
+        if (!env.IS_PRODUCTION && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+          return callback(null, true);
+        }
+
+        // Allow Azure App Service subdomains in cloud production
+        if (/^https:\/\/[\w-]+\.azurewebsites\.net$/.test(origin)) {
+          return callback(null, true);
+        }
+
         return callback(new Error(`CORS policy blocked access from origin ${origin}`));
       },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Request-ID']
     })
   );
 

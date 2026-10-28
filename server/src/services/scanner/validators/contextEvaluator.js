@@ -8,7 +8,9 @@ const POSITIVE_KEYWORDS = [
   'secret', 'password', 'passwd', 'pwd', 'token', 'api_key', 'apikey', 'credential',
   'auth', 'bearer', 'private', 'client_secret', 'access_key', 'authorization',
   'connectionstring', 'database', 'db_password', 'conn_str', 'aadhaar', 'pan_card',
-  'pan_no', 'identity', 'card_number', 'credit_card', 'debit_card', 'cvv', 'ifsc', 'upi'
+  'pan_no', 'identity', 'card_number', 'credit_card', 'debit_card', 'cvv', 'ifsc', 'upi',
+  'confidential', 'restricted', 'internal_only', 'top_secret', 'vault', 'sendgrid',
+  'twilio', 'webhook', 'iban', 'sin', 'nino', 'license', 'passport'
 ];
 
 const NEGATIVE_KEYWORDS = [

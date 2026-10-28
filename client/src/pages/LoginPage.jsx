@@ -1,37 +1,12 @@
 import React, { useState } from 'react';
 import { login } from '../services/api';
 
-const PERSONAS = [
-  {
-    role: 'SOC Analyst',
-    email: 'analyst@leaklens.local',
-    badge: 'CLEARANCE LEVEL 2',
-    badgeColor: 'var(--accent-cyan)',
-    desc: 'Triage exposures, upload files, simulate payloads & manage incidents.'
-  },
-  {
-    role: 'Administrator',
-    email: 'admin@leaklens.local',
-    badge: 'CLEARANCE LEVEL 3',
-    badgeColor: 'var(--status-danger)',
-    desc: 'Full platform administration, Azure cloud integrations & rule toggles.'
-  },
-  {
-    role: 'Auditor',
-    email: 'compliance@leaklens.local',
-    badge: 'COMPLIANCE AUDIT',
-    badgeColor: 'var(--status-healthy)',
-    desc: 'Inspect tamper-evident audit logs, verification hashes & DP-900 metrics.'
-  }
-];
-
 export function LoginPage({ onLoginSuccess, onNavigateToLanding }) {
-  const [email, setEmail] = useState('analyst@leaklens.local');
+  const [email, setEmail] = useState('admin@leaklens.local');
   const [password, setPassword] = useState('LeakLensDev2026!');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [selectedPersona, setSelectedPersona] = useState('analyst@leaklens.local');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -48,13 +23,6 @@ export function LoginPage({ onLoginSuccess, onNavigateToLanding }) {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleQuickFill = (roleEmail) => {
-    setEmail(roleEmail);
-    setPassword('LeakLensDev2026!');
-    setSelectedPersona(roleEmail);
-    setError(null);
   };
 
   return (
@@ -267,10 +235,10 @@ export function LoginPage({ onLoginSuccess, onNavigateToLanding }) {
           <div>
             <div style={{ marginBottom: '22px' }}>
               <h2 style={{ fontSize: '22px', fontWeight: 800, margin: '0 0 6px 0', letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
-                Authenticate SOC Session
+                Authenticate Operator Session
               </h2>
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>
-                Select an enterprise persona or provide your authorized operator credentials.
+                Enter your Security Administrator credentials to access the unified platform.
               </p>
             </div>
 
@@ -308,7 +276,7 @@ export function LoginPage({ onLoginSuccess, onNavigateToLanding }) {
                     fontWeight: 700
                   }}
                 >
-                  Work Email Address
+                  Operator Email Address
                 </label>
                 <input
                   id="input-email"
@@ -316,7 +284,7 @@ export function LoginPage({ onLoginSuccess, onNavigateToLanding }) {
                   className="input"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="analyst@leaklens.local"
+                  placeholder="admin@leaklens.local"
                   required
                   style={{ width: '100%' }}
                 />
@@ -404,62 +372,37 @@ export function LoginPage({ onLoginSuccess, onNavigateToLanding }) {
               </button>
             </form>
 
-            {/* Quick Persona Fill Interactive Cards */}
+            {/* Unified Operator Clearance Panel */}
             <div style={{ marginTop: '24px', paddingTop: '18px', borderTop: '1px solid var(--border-subtle)' }}>
               <div
                 style={{
-                  fontSize: '10px',
-                  color: 'var(--text-muted)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.06em',
-                  marginBottom: '10px',
-                  fontWeight: 800
+                  padding: '12px 14px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-subtle)',
+                  backgroundColor: 'rgba(2, 132, 199, 0.04)'
                 }}
               >
-                Quick-Fill Authorized Persona
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {PERSONAS.map((p) => {
-                  const isSelected = selectedPersona === p.email;
-                  return (
-                    <div
-                      key={p.email}
-                      onClick={() => handleQuickFill(p.email)}
-                      className="hover-card"
-                      style={{
-                        padding: '10px 14px',
-                        borderRadius: 'var(--radius-md)',
-                        border: isSelected ? '1.5px solid var(--accent-cyan)' : '1px solid var(--border-subtle)',
-                        backgroundColor: isSelected ? 'rgba(2, 132, 199, 0.06)' : '#ffffff',
-                        cursor: 'pointer',
-                        transition: 'var(--transition-fast)'
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          {p.role}
-                        </span>
-                        <span
-                          style={{
-                            fontSize: '9px',
-                            fontWeight: 800,
-                            padding: '1px 6px',
-                            borderRadius: 'var(--radius-pill)',
-                            color: p.badgeColor,
-                            backgroundColor: 'rgba(0,0,0,0.03)',
-                            border: `1px solid ${p.badgeColor}`
-                          }}
-                        >
-                          {p.badge}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.3 }}>
-                        {p.desc}
-                      </div>
-                    </div>
-                  );
-                })}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    Unified Security Administrator Interface
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '9px',
+                      fontWeight: 800,
+                      padding: '2px 8px',
+                      borderRadius: 'var(--radius-pill)',
+                      color: 'var(--status-danger)',
+                      backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                      border: '1px solid rgba(239, 68, 68, 0.2)'
+                    }}
+                  >
+                    FULL CLEARANCE
+                  </span>
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                  All operators access a single unified interface with complete Azure cloud connection controls, deep file inspection, and real-time incident remediation.
+                </div>
               </div>
             </div>
           </div>

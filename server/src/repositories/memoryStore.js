@@ -48,13 +48,7 @@ export const memoryStore = {
   incident_findings: [],
   remediation_actions: [],
   audit_logs: [],
-  integration_preferences: {
-    power_bi_report_name: 'Executive Exposure Telemetry',
-    power_bi_report_url: 'https://app.powerbi.com/groups/me/reports/leaklens-executive-summary',
-    azure_subscription_name: 'LeakLens-Production-Subscription',
-    azure_resource_group: 'rg-leaklens-eastus-001',
-    azure_region: 'eastus'
-  },
+  integration_preferences: {},
   integration_last_checks: {}
 };
 

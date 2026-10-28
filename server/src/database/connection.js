@@ -3,6 +3,12 @@ import env from '../config/env.js';
 
 let poolPromise = null;
 let activePool = null;
+let cachedHealth = null;
+let lastHealthCheckTime = 0;
+let circuitBreakerOpenUntil = 0;
+
+const HEALTH_CACHE_TTL_MS = 5000;
+const CIRCUIT_BREAKER_COOLDOWN_MS = 15000;
 
 // Transient error codes common to Azure SQL Database during failovers/throttling
 const TRANSIENT_ERROR_CODES = new Set([
@@ -46,12 +52,37 @@ function buildSqlConfig() {
 const sqlConfig = buildSqlConfig();
 
 /**
+ * Resets the health cache and circuit breaker (e.g. for testing or explicit reconnect).
+ */
+export function resetHealthCache() {
+  cachedHealth = null;
+  lastHealthCheckTime = 0;
+  circuitBreakerOpenUntil = 0;
+}
+
+/**
+ * Fast synchronous check whether database pool is currently active and connected.
+ * @returns {boolean}
+ */
+export function isDatabaseAvailable() {
+  return Boolean(activePool && activePool.connected && Date.now() > circuitBreakerOpenUntil);
+}
+
+/**
  * Initializes and retrieves the singleton MSSQL Connection Pool.
  * @returns {Promise<sql.ConnectionPool>}
  */
 export async function getPool() {
   if (activePool && activePool.connected) {
     return activePool;
+  }
+
+  // Circuit breaker: avoid hammering failing SQL server during cooldown
+  if (Date.now() < circuitBreakerOpenUntil) {
+    const remainingSec = Math.ceil((circuitBreakerOpenUntil - Date.now()) / 1000);
+    const err = new Error(`Database connection circuit breaker active. Retry in ${remainingSec}s.`);
+    err.code = 'CIRCUIT_BREAKER_ACTIVE';
+    throw err;
   }
 
   if (!poolPromise) {
@@ -65,6 +96,7 @@ export async function getPool() {
       .connect()
       .then(p => {
         activePool = p;
+        circuitBreakerOpenUntil = 0;
         if (!env.IS_TEST) {
           console.log(`[MSSQL] Connected successfully to database: ${env.DB.database} on ${env.DB.server}:${env.DB.port} (Auth: ${env.DB.authType})`);
         }
@@ -73,8 +105,9 @@ export async function getPool() {
       .catch(err => {
         poolPromise = null;
         activePool = null;
+        circuitBreakerOpenUntil = Date.now() + CIRCUIT_BREAKER_COOLDOWN_MS;
         if (!env.IS_TEST) {
-          console.warn(`[MSSQL Connection Failed]: ${err.message}. Proceeding in offline/degraded mode.`);
+          console.warn(`[MSSQL Connection Failed]: ${err.message}. Circuit breaker activated for ${CIRCUIT_BREAKER_COOLDOWN_MS / 1000}s. Proceeding in offline/degraded mode.`);
         }
         throw err;
       });
@@ -85,11 +118,30 @@ export async function getPool() {
 
 /**
  * Verifies live database connectivity using an active heartbeat query.
+ * Cached with a 5s TTL to avoid redundant round-trips across repository calls.
  * Strictly avoids exposing connection strings or passwords.
  * 
+ * @param {boolean} [force=false] - Force live bypass of the health cache
  * @returns {Promise<{ isHealthy: boolean, latencyMs?: number, message: string }>}
  */
-export async function checkDatabaseHealth() {
+export async function checkDatabaseHealth(force = false) {
+  const now = Date.now();
+
+  // Return cached result if within TTL and not explicitly forced
+  if (!force && cachedHealth && (now - lastHealthCheckTime < HEALTH_CACHE_TTL_MS)) {
+    return cachedHealth;
+  }
+
+  // If circuit breaker is open, return early without network timeout
+  if (!force && now < circuitBreakerOpenUntil) {
+    cachedHealth = {
+      isHealthy: false,
+      message: 'Database connectivity unreachable (circuit breaker active)'
+    };
+    lastHealthCheckTime = now;
+    return cachedHealth;
+  }
+
   const start = Date.now();
   try {
     const pool = await getPool();
@@ -97,22 +149,30 @@ export async function checkDatabaseHealth() {
     const latencyMs = Date.now() - start;
 
     if (result && result.recordset && result.recordset[0]?.is_alive === 1) {
-      return {
+      cachedHealth = {
         isHealthy: true,
         latencyMs,
         message: 'Database operational'
       };
+      lastHealthCheckTime = Date.now();
+      return cachedHealth;
     }
 
-    return {
+    cachedHealth = {
       isHealthy: false,
       message: 'Database connectivity test returned unexpected response'
     };
+    lastHealthCheckTime = Date.now();
+    return cachedHealth;
   } catch (err) {
-    return {
+    cachedHealth = {
       isHealthy: false,
-      message: 'Database connectivity unreachable'
+      message: err.code === 'CIRCUIT_BREAKER_ACTIVE'
+        ? err.message
+        : 'Database connectivity unreachable'
     };
+    lastHealthCheckTime = Date.now();
+    return cachedHealth;
   }
 }
 
@@ -193,6 +253,8 @@ export { sql };
 export default {
   getPool,
   checkDatabaseHealth,
+  resetHealthCache,
+  isDatabaseAvailable,
   executeQuery,
   closePool,
   sql
